@@ -13,7 +13,7 @@ const notePosts = await getNoteArticles(6);
 const allPosts = [
   ...techPosts.map(post => ({ title: post.data.title, category: 'tech' as const, publicSlug: post.slug, reactionSlug: post.slug, description: post.data.description || '', coverImage: post.data.coverImage, pubDate: post.data.pubDate })),
   ...diaryPosts.map(post => ({ title: post.data.title, category: 'diary' as const, publicSlug: post.data.permalink || post.slug, reactionSlug: post.slug, description: post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : ''), coverImage: post.data.coverImage, pubDate: post.data.pubDate })),
-  ...notePosts.map(post => ({ title: post.title, category: 'note' as const, publicSlug: post.url, reactionSlug: undefined, description: post.description, coverImage: undefined, pubDate: post.pubDate, externalUrl: post.url })),
+  ...notePosts.map(post => ({ title: post.title, category: 'note' as const, publicSlug: post.url, reactionSlug: undefined, description: post.description, coverImage: post.coverImage, pubDate: post.pubDate, externalUrl: post.url })),
 ].sort((a, b) => b.pubDate.valueOf() - a.pubDate.valueOf());
 
 const site = Astro.site ?? new URL('https://neu-dev.net');
@@ -78,7 +78,7 @@ const homeStructuredData = {
     </div>
     <div class="logs-grid">
       {allPosts.map((post, index) => (
-        <PostCard client:visible title={post.title} excerpt={post.description} date={post.pubDate.toLocaleDateString('ja-JP')} category={post.category} slug={post.publicSlug} reactionSlug={post.reactionSlug} collection={post.category} coverImage={post.coverImage} externalUrl={post.externalUrl} index={index} featured={index === 0} />
+        <PostCard client:visible title={post.title} excerpt={post.description} date={post.pubDate.toLocaleDateString('ja-JP')} category={post.category} slug={post.publicSlug} reactionSlug={post.reactionSlug} collection={post.category} coverImage={post.coverImage} externalUrl={post.externalUrl} index={index} featured={index === 0 && post.category !== 'note'} />
       ))}
     </div>
     {allPosts.length === 0 && <div class="empty-state"><b>まだ記事がありません</b><span>最初の記事を準備中です。</span></div>}

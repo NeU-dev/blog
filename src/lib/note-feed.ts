@@ -3,6 +3,7 @@ export interface NoteArticle {
   description: string;
   pubDate: Date;
   url: string;
+  coverImage?: string;
 }
 
 export const NOTE_PROFILE_URL = 'https://note.com/quick_minnow8178';
@@ -15,12 +16,14 @@ const fallbackArticles: NoteArticle[] = [
     description: 'というか苦手だ。キラというキャラクター自体を悪とするつもりはないけれど、なぜそう感じるのかを考えます。',
     pubDate: new Date('2026-09-19T19:58:36+09:00'),
     url: 'https://note.com/quick_minnow8178/n/n9ed7e770d3c7',
+    coverImage: 'https://assets.st-note.com/production/uploads/images/315316021/rectangle_large_type_2_34bcd5949be74b1b7673202e12cf0eb9.png?width=800',
   },
   {
     title: '【ネタバレ考察】まどマギ　ワルプルギスの廻天　まどかハッピーエンド説',
     description: '『ワルプルギスの廻天』を観た感想と、マルグリート・円環の理・まどかの結末についてのネタバレ考察。',
     pubDate: new Date('2026-08-30T14:55:02+09:00'),
     url: 'https://note.com/quick_minnow8178/n/nf396c956dde9',
+    coverImage: 'https://assets.st-note.com/production/uploads/images/308478351/rectangle_large_type_2_2c8f3c2198ee6c04c8d903ed9e0b72c7.png?width=800',
   },
 ];
 
@@ -61,13 +64,23 @@ function validNoteUrl(value: string) {
   }
 }
 
+function validNoteImageUrl(value: string) {
+  try {
+    const url = new URL(decodeXml(value));
+    return url.protocol === 'https:' && (url.hostname === 'assets.st-note.com' || url.hostname.endsWith('.cloudfront.net')) ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
 function parseFeed(xml: string) {
   return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].flatMap(([, item]) => {
     const url = validNoteUrl(readTag(item, 'link'));
+    const coverImage = validNoteImageUrl(readTag(item, 'media:thumbnail'));
     const title = plainText(readTag(item, 'title'));
     const date = new Date(decodeXml(readTag(item, 'pubDate')));
     if (!url || !title || Number.isNaN(date.valueOf())) return [];
-    return [{ title, description: plainText(readTag(item, 'description')), pubDate: date, url }];
+    return [{ title, description: plainText(readTag(item, 'description')), pubDate: date, url, coverImage: coverImage || undefined }];
   });
 }
 

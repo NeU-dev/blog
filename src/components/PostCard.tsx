@@ -23,11 +23,12 @@ export function PostCard({ title, excerpt, date, category, slug, reactionSlug = 
   }, [collection, reactionSlug]);
   const blocks = [reactions.spark || 0, reactions.try || 0, reactions.broke || 0];
   const totalReactions = blocks.reduce((sum, value) => sum + value, 0);
+  const showMedia = featured || collection === 'note';
   return (
     <article className={`log-card log-card--${collection} ${featured ? 'log-card--featured' : ''}`}>
       <a href={externalUrl ?? `/${collection}/${slug}/`} {...(externalUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
         <div className="log-card__window"><span aria-hidden="true">● ● ●</span><span>{collection} / {String(index + 1).padStart(2, '0')}</span></div>
-        {featured && <div className="log-card__media">
+        {showMedia && <div className="log-card__media">
           {coverImage ? <img src={coverImage} alt="" loading="lazy" decoding="async" width={1200} height={675} /> : (
             <div className="log-card__placeholder" aria-hidden="true">
               <span>{collection === 'tech' ? '</>' : collection === 'note' ? 'note' : ':-)'}</span>

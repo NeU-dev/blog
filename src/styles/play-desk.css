@@ -94,6 +94,8 @@ button:disabled { cursor: default; }
 .log-card > a:hover { box-shadow: 4px 7px 0 var(--shadow); transform: translateY(-2px); }
 .log-card__window { display: flex; justify-content: space-between; padding: 9px 13px; color: var(--ink-muted); background: var(--paper-lilac); border-bottom: 1px solid var(--rule); font: 12px/1.5 var(--mono); }
 .log-card__window > span:first-child { font-size: 10px; letter-spacing: 2px; }
+.log-card--note .log-card__window { color: #31594d; background: #e0eee7; }
+.log-card--note .log-card__read { color: #28745e; }
 .log-card__media { position: relative; height: 140px; overflow: hidden; background: #f2d98d; }
 .log-card__media img { width: 100%; height: 100%; object-fit: cover; }
 .log-card__placeholder { display: grid; place-items: center; height: 100%; font: 600 45px var(--mono); }

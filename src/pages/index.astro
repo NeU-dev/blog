@@ -5,13 +5,16 @@ import { PostCard } from '../components/PostCard';
 import { HeroConsole } from '../components/HeroConsole';
 import { Leaderboard } from '../components/Leaderboard';
 import { VisitorTicket } from '../components/VisitorTicket';
+import { getNoteArticles, NOTE_PROFILE_URL } from '../lib/note-feed';
 
 const techPosts = await getCollection('tech', ({ data }) => !data.draft);
 const diaryPosts = await getCollection('diary', ({ data }) => !data.draft);
+const notePosts = await getNoteArticles(6);
 const allPosts = [
-  ...techPosts.map(post => ({ ...post, category: 'tech' as const, publicSlug: post.slug, reactionSlug: post.slug, description: post.data.description || '', coverImage: post.data.coverImage })),
-  ...diaryPosts.map(post => ({ ...post, category: 'diary' as const, publicSlug: post.data.permalink || post.slug, reactionSlug: post.slug, description: post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : ''), coverImage: post.data.coverImage })),
-].sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+  ...techPosts.map(post => ({ title: post.data.title, category: 'tech' as const, publicSlug: post.slug, reactionSlug: post.slug, description: post.data.description || '', coverImage: post.data.coverImage, pubDate: post.data.pubDate })),
+  ...diaryPosts.map(post => ({ title: post.data.title, category: 'diary' as const, publicSlug: post.data.permalink || post.slug, reactionSlug: post.slug, description: post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : ''), coverImage: post.data.coverImage, pubDate: post.data.pubDate })),
+  ...notePosts.map(post => ({ title: post.title, category: 'note' as const, publicSlug: post.url, reactionSlug: undefined, description: post.description, coverImage: undefined, pubDate: post.pubDate, externalUrl: post.url })),
+].sort((a, b) => b.pubDate.valueOf() - a.pubDate.valueOf());
 
 const site = Astro.site ?? new URL('https://neu-dev.net');
 const homeDescription = 'iOSアプリやWebツールを個人開発。生成AIを相棒にした開発の試行錯誤と、身近な疑問をデータや計算で掘り下げた記録を書くNeUのブログ。';
@@ -70,12 +73,12 @@ const homeStructuredData = {
     <div class="logs-heading">
       <div class="section-kicker"><h2>最近のログ</h2><span>LATEST NOTES / {String(allPosts.length).padStart(2, '0')}</span></div>
       <nav class="log-filters" aria-label="記事の種類">
-        <a class="is-active" aria-current="page" href="/">すべて</a><a href="/tech/">技術</a><a href="/diary/">日記</a>
+        <a class="is-active" aria-current="page" href="/">すべて</a><a href="/tech/">技術</a><a href="/diary/">日記</a>{notePosts.length > 0 && <a class="log-note-link" href={NOTE_PROFILE_URL} target="_blank" rel="noopener noreferrer">note ↗</a>}
       </nav>
     </div>
     <div class="logs-grid">
       {allPosts.map((post, index) => (
-        <PostCard client:visible title={post.data.title} excerpt={post.description} date={post.data.pubDate.toLocaleDateString('ja-JP')} category={post.category} slug={post.publicSlug} reactionSlug={post.reactionSlug} collection={post.category} coverImage={post.coverImage} index={index} featured={index === 0} />
+        <PostCard client:visible title={post.title} excerpt={post.description} date={post.pubDate.toLocaleDateString('ja-JP')} category={post.category} slug={post.publicSlug} reactionSlug={post.reactionSlug} collection={post.category} coverImage={post.coverImage} externalUrl={post.externalUrl} index={index} featured={index === 0} />
       ))}
     </div>
     {allPosts.length === 0 && <div class="empty-state"><b>まだ記事がありません</b><span>最初の記事を準備中です。</span></div>}

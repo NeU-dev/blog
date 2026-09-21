@@ -22,3 +22,6 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# local Meshy task metadata and full-resolution source models
+meshy_output/

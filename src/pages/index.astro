@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { getCollection } from 'astro:content';
 import { PostCard } from '../components/PostCard';
 import { HeroConsole } from '../components/HeroConsole';
+import { MeshyShowcase } from '../components/MeshyShowcase';
 import { Leaderboard } from '../components/Leaderboard';
 import { VisitorTicket } from '../components/VisitorTicket';
 import { getNoteArticles, NOTE_PROFILE_URL } from '../lib/note-feed';
@@ -51,20 +52,26 @@ const homeStructuredData = {
   structuredData={homeStructuredData}
 >
   <section class="home-hero" aria-label="NeUの個人開発と寄り道の記録">
-    <div class="home-hero__inner">
-      <div class="hero-copy">
-        <div class="status-ribbon"><i aria-hidden="true"></i> NEU'S FIELD NOTES</div>
-        <h1>つくりかけも、<br /><em>おもしろい。</em></h1>
-        <p>iOSアプリも、Webも、身近な「なんで？」も。<br />生成AIを相棒に、つくって考えたことを残す場所。</p>
-        <div class="hero-actions">
-          <a href="#latest" class="pixel-button pixel-button--purple hero-latest">最新の記事を読む <span aria-hidden="true">↘</span></a>
-          <span class="hero-byline">WRITTEN BY NeU</span>
+    <div class="home-hero__sticky">
+      <MeshyShowcase client:visible />
+      <div class="home-hero__inner">
+        <div class="hero-copy">
+          <div class="status-ribbon"><i aria-hidden="true"></i> NEU'S FIELD NOTES</div>
+          <h1>つくりかけも、<br /><em>おもしろい。</em></h1>
+          <p>iOSアプリも、Webも、身近な「なんで？」も。<br />生成AIを相棒に、つくって考えたことを残す場所。</p>
+          <div class="hero-actions">
+            <a href="#latest" class="pixel-button pixel-button--purple hero-latest">最新の記事を読む <span aria-hidden="true">↘</span></a>
+            <span class="hero-byline">WRITTEN BY NeU</span>
+          </div>
+          <div class="hero-topics" aria-label="いまの領域"><span>iOS / SwiftUI</span><span>生成AI</span><span>Web / Electron</span><span>データ分析</span></div>
         </div>
-        <div class="hero-topics" aria-label="いまの領域"><span>iOS / SwiftUI</span><span>生成AI</span><span>Web / Electron</span><span>データ分析</span></div>
+        <div class="hero-console-stack">
+          <HeroConsole client:visible />
+          <button type="button" class="pixel-button game-launcher-button" data-open-game><span class="game-launcher-icon" aria-hidden="true">▶</span><span>ブロック崩しで遊ぶ</span><span aria-hidden="true">↗</span></button>
+        </div>
       </div>
-      <div class="hero-console-stack">
-        <HeroConsole client:visible />
-        <button type="button" class="pixel-button game-launcher-button" data-open-game><span class="game-launcher-icon" aria-hidden="true">▶</span><span>ブロック崩しで遊ぶ</span><span aria-hidden="true">↗</span></button>
+      <div class="home-hero__scroll-cue" aria-hidden="true">
+        <span>SCROLL TO EXPLORE</span><i></i>
       </div>
     </div>
   </section>

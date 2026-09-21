@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createBreakoutAutoplay } from './breakout-autoplay';
 import { drawBreakoutScreen } from './breakout-screen';
+import { publishConsoleModel } from './console-model-bridge';
 
 /** Mount one isolated console. The React island owns its teardown.
  * @param {HTMLDivElement} root
@@ -11,15 +12,25 @@ export function mountHeroConsole(root) {
   const touch = root.querySelector('.console-touch');
   const fallback = root.querySelector('.console-fallback');
   const status = root.querySelector('[role="status"]');
+  const worldStage = root.closest('.home-hero')?.querySelector('.meshy-world__stage');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
   const aborter = new AbortController();
   const signal = aborter.signal;
-  let renderer, scene, model, camera, frame = 0, visible = true, disposed = false;
+  let renderer, scene, model, camera, frame = 0, disposed = false;
+  const inViewport = element => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0
+      && rect.top < innerHeight && rect.left < innerWidth;
+  };
+  let localVisible = inViewport(root);
+  let worldVisible = worldStage ? inViewport(worldStage) : localVisible;
+  let visible = localVisible;
   let gameOpen = document.body.dataset.neulogGameOpen === 'true';
   let wake = () => {};
   let resizeObserver, intersectionObserver, frameCount = 0;
   let lastTickTime = 0, lastDrawTime = 0, forcePaint = true, manualPlay = null;
+  let worldRendered = false, unpublishModel = () => {};
   const demo = createBreakoutAutoplay();
   const lcdPalette = {};
   const autoplayEnabled = () => manualPlay === null ? !reducedMotion.matches : manualPlay;
@@ -34,6 +45,10 @@ export function mountHeroConsole(root) {
     return getComputedStyle(probe).color;
   };
   function fail() {
+    unpublishModel();
+    unpublishModel = () => {};
+    worldRendered = false;
+    delete root.dataset.worldRendered;
     root.dataset.renderer = 'fallback';
     stage.hidden = true;
     fallback.hidden = false;
@@ -52,7 +67,7 @@ export function mountHeroConsole(root) {
       if (autoplayEnabled()) frame = requestAnimationFrame(drawFallback);
     }
     wake = () => { lastTickTime = 0; if (!frame && !disposed) frame = requestAnimationFrame(drawFallback); };
-    wake();
+    updateVisibility();
   }
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
@@ -271,7 +286,7 @@ export function mountHeroConsole(root) {
           renderer.shadowMap.needsUpdate = true;
         }
         paintScreen();
-        renderer.render(scene, camera);
+        if (!worldRendered) renderer.render(scene, camera);
         lastDrawTime = timestamp;
         forcePaint = false;
         frameCount++;
@@ -292,6 +307,15 @@ export function mountHeroConsole(root) {
     }
     function requestDraw() {
       if (!frame && !disposed) frame = requestAnimationFrame(draw);
+    }
+    function setWorldRendered(active) {
+      if (disposed || stage.hidden) return;
+      const next = Boolean(active);
+      if (worldRendered === next) return;
+      worldRendered = next;
+      if (next) root.dataset.worldRendered = 'true';
+      else delete root.dataset.worldRendered;
+      updateVisibility();
     }
     function resize() {
       if (stage.hidden) return;
@@ -385,6 +409,7 @@ export function mountHeroConsole(root) {
     root.dataset.renderer = 'threejs';
     wake = requestDraw;
     sync();
+    unpublishModel = publishConsoleModel(root, { model, camera, setWorldRendered });
     resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(touch);
   } catch (error) {
@@ -398,6 +423,9 @@ export function mountHeroConsole(root) {
     wake();
   }, { signal });
   function updateVisibility() {
+    // The live LCD belongs to the world scene while its clone is displayed.
+    // Its transformed, transparent DOM hit area is not the visible model.
+    visible = worldRendered && worldStage ? worldVisible : localVisible;
     lastTickTime = 0;
     if (!visible || document.hidden || gameOpen) {
       cancelAnimationFrame(frame);
@@ -417,11 +445,23 @@ export function mountHeroConsole(root) {
     for (const button of [touch, fallbackToggle]) button.setAttribute('aria-label', autoplayEnabled() ? 'ブロック崩しの自動プレイを一時停止' : 'ブロック崩しの自動プレイを再生');
     wake();
   }, { signal });
-  intersectionObserver = new IntersectionObserver(entries => { visible = entries[0].isIntersecting; updateVisibility(); });
+  intersectionObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (entry.target === root) localVisible = entry.isIntersecting;
+      else if (entry.target === worldStage) worldVisible = entry.isIntersecting;
+    }
+    updateVisibility();
+  });
   intersectionObserver.observe(root);
+  if (worldStage) intersectionObserver.observe(worldStage);
+  updateVisibility();
   function dispose() {
     if (disposed) return;
     disposed = true;
+    unpublishModel();
+    unpublishModel = () => {};
+    worldRendered = false;
+    delete root.dataset.worldRendered;
     aborter.abort();
     cancelAnimationFrame(frame);
     resizeObserver?.disconnect();

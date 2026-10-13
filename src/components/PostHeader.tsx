@@ -14,7 +14,7 @@ export function PostHeader({ title, category, date, tags = [], slug, coverImage 
         {tags.length > 0 && <ul className="post-head__tags">{tags.map(tag => <li key={tag}>#{tag}</li>)}</ul>}
         <div className="post-head__byline">
           <img src="/icon.JPG" alt="" width={2048} height={2048} />
-          <div><b>NeU</b><span>iOS・Webの個人開発</span></div>
+          <div><b>NeU</b><span>サービスの企画・設計・運営</span></div>
           <PostActions slug={slug} title={title} />
         </div>
       </header>

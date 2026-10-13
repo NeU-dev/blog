@@ -4,7 +4,7 @@ import { AboutView } from '../components/AboutView';
 
 const site = Astro.site ?? new URL('https://neu-dev.net');
 const pageUrl = new URL('/about/', site).href;
-const description = 'iOSアプリとWebツールを個人開発し、生成AIを企画から実装までの相棒にしているNeUのプロフィール。';
+const description = '個人でアプリやWebサービスの企画・設計・運営に取り組むNeUのプロフィール。ユーザーの課題を整理し、AIを活用しながら開発と改善を進めています。';
 const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -22,8 +22,7 @@ const structuredData = {
       '@id': new URL('/#person', site).href,
       name: 'NeU',
       url: pageUrl,
-      jobTitle: '個人開発者',
-      knowsAbout: ['iOS', 'SwiftUI', '生成AI', 'Astro', 'Electron', 'データ分析'],
+      knowsAbout: ['プロダクト企画', '課題整理', '機能・体験設計', 'AIの活用', 'サービス運営', '改善・検証'],
     },
   ],
 };

@@ -14,12 +14,12 @@ const allPosts = [
   ...diaryPosts.map(post => ({ title: post.data.title, category: 'diary' as const, publicSlug: post.data.permalink || post.slug, reactionSlug: post.slug, description: post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : ''), coverImage: post.data.coverImage, pubDate: post.data.pubDate })),
   ...notePosts.map(post => ({ title: post.title, category: 'note' as const, publicSlug: post.url, reactionSlug: undefined, description: post.description, coverImage: post.coverImage, pubDate: post.pubDate, externalUrl: post.url })),
 ].sort((a, b) => b.pubDate.valueOf() - a.pubDate.valueOf());
-const titleLines = ['つくりかけも、', 'おもしろい。'];
+const titleLines = ['NeUの', 'ブログ。'];
 const topicsB = ['MAKE', 'PLAY', 'BREAK', 'SHIP', 'LOG', 'REPEAT'];
-const topics = ['iOS / SwiftUI', '生成AI', 'Web / Electron', 'Astro', 'データ分析', '個人開発', 'つくりかけ'];
+const topics = ['プロダクト企画', '課題整理', '機能・体験設計', 'AIの活用', 'サービス運営', '改善・検証'];
 
 const site = Astro.site ?? new URL('https://neu-dev.net');
-const homeDescription = 'iOSアプリやWebツールを個人開発。生成AIを相棒にした開発の試行錯誤と、身近な疑問をデータや計算で掘り下げた記録を書くNeUのブログ。';
+const homeDescription = 'アプリやWebサービスの企画・設計・運営に取り組むNeUのブログ。プロダクトづくりの中で考えたことや判断したこと、AIの活用について書いています。';
 const homeStructuredData = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -38,21 +38,20 @@ const homeStructuredData = {
       '@id': new URL('/#person', site).href,
       name: 'NeU',
       url: new URL('/about/', site).href,
-      jobTitle: '個人開発者',
-      knowsAbout: ['iOS', 'SwiftUI', '生成AI', 'Astro', 'Electron', 'データ分析'],
+      knowsAbout: ['プロダクト企画', '課題整理', '機能・体験設計', 'AIの活用', 'サービス運営', '改善・検証'],
     },
   ],
 };
 ---
 
 <BaseLayout
-  title="iOSアプリ・生成AIの個人開発ブログ"
+  title="プロダクトづくり・AI活用のブログ"
   currentPage="home"
   description={homeDescription}
   image="/images/og/neulog-home.png"
   structuredData={homeStructuredData}
 >
-  <section class="hero" aria-label="NeUの個人開発と寄り道の記録">
+  <section class="hero" aria-label="NeUのブログ紹介">
     <div class="container hero__grid">
       <div class="hero__copy">
         <p class="eyebrow">NeU's field notes</p>
@@ -60,7 +59,7 @@ const homeStructuredData = {
           <span aria-hidden="true">{[...titleLines[0]].map((char, i) => <span class="ch" style={`--i:${i}`}>{char}</span>)}</span>
           <span aria-hidden="true"><mark>{[...titleLines[1]].map((char, i) => <span class="ch" style={`--i:${i + titleLines[0].length}`}>{char}</span>)}</mark></span>
         </h1>
-        <p class="hero__lead">iOSアプリも、Webも、身近な<b>「なんで？」</b>も。<br />生成AIを相棒に、つくって考えたことを残す場所。</p>
+        <p class="hero__lead">プロダクトづくりの中で考えたことや判断したこと、<br />AIの活用について書いています。</p>
         <div class="hero__actions">
           <a href="#latest" class="btn btn--primary">最新の記事を読む <span class="btn__icon" aria-hidden="true">↓</span></a>
           <a href="/about/" class="btn btn--ghost">書いている人 <span class="btn__icon" aria-hidden="true">☺</span></a>

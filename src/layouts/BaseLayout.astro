@@ -32,7 +32,7 @@ const {
 
 const site = Astro.site ?? new URL('https://neu-dev.net');
 const pageTitle = `${title} | NeULOG`;
-const pageDescription = description?.trim() || 'iOS・Webの個人開発と、身近な疑問の分析を記録するNeUのブログ。';
+const pageDescription = description?.trim() || 'アプリやWebサービスの企画・設計・運営に取り組むNeUのブログ。プロダクトづくりの中で考えたことや判断したこと、AIの活用について書いています。';
 const canonicalUrl = canonical ?? new URL(Astro.url.pathname, site).href;
 const imageUrl = new URL(image ?? '/images/og/neulog-home.png', site).href;
 const isDefaultImage = new URL(imageUrl).pathname === '/images/og/neulog-home.png';

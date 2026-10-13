@@ -8,7 +8,7 @@ export function Footer() {
         <div className="site-footer__top">
           <div className="site-footer__intro">
             <a href="/" className="brand"><span className="brand__mark" aria-hidden="true">n<i>.</i></span><span>NeULOG</span></a>
-            <p>iOS・Webの個人開発と、身近な「なんで？」をデータで掘り下げた記録。つくりかけも、ここに残します。</p>
+            <p>プロダクトづくりの中で考えたことや判断したこと、AIの活用について書いています。</p>
           </div>
           <nav className="site-footer__nav" aria-label="フッターメニュー">
             <div>

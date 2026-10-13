@@ -5,7 +5,7 @@ import { PostCard } from '../../components/PostCard';
 const posts = (await getCollection('diary', ({ data }) => !data.draft)).sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 const site = Astro.site ?? new URL('https://neu-dev.net');
 const pageUrl = new URL('/diary/', site).href;
-const description = '身近な疑問をデータや計算で掘り下げた分析と、個人開発者NeUの日々の発見をまとめた記事一覧。';
+const description = '身近な疑問をデータや計算で掘り下げた分析と、NeUの日々の出来事や発見をまとめた日記・分析記事の一覧。';
 const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [

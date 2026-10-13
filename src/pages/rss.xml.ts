@@ -44,7 +44,7 @@ export const GET: APIRoute = async ({ site }) => {
     '  <channel>',
     '    <title>NeULOG</title>',
     `    <link>${escapeXml(new URL('/', baseUrl).href)}</link>`,
-    '    <description>iOS・Webの個人開発と、身近な疑問の分析を記録するNeUのブログ。</description>',
+    '    <description>アプリやWebサービスの企画・設計・運営に取り組むNeUのブログ。プロダクトづくりの中で考えたことや判断したこと、AIの活用について書いています。</description>',
     '    <language>ja</language>',
     `    <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />`,
     ...(latestDate ? [`    <lastBuildDate>${latestDate.toUTCString()}</lastBuildDate>`] : []),

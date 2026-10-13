@@ -1,17 +1,17 @@
 import React from 'react';
 
 const skills = [
-  ['iOS / SwiftUI', 'MAIN'],
-  ['AI-assisted dev', 'DAILY'],
-  ['Indie app dev', 'SHIPPING'],
-  ['Astro / Web', 'THIS BLOG'],
-  ['Electron', 'TOOLS'],
-  ['Data / Analysis', 'HOBBY'],
+  ['プロダクト企画', 'PLAN'],
+  ['課題整理', 'RESEARCH'],
+  ['機能・体験設計', 'DESIGN'],
+  ['AIの活用', 'AI'],
+  ['サービス運営', 'OPERATE'],
+  ['改善・検証', 'IMPROVE'],
 ];
 const interests = [
-  ['01', 'つくる', 'iOSアプリやWebツールを、アイデアから公開まで。'],
-  ['02', '考える', '身近な疑問を、データと仮説で掘り下げる。'],
-  ['03', '書く', 'うまくいったことも失敗も、再現できる形で残す。'],
+  ['01', '企画', 'ユーザーの課題を整理し、必要な機能を考える。'],
+  ['02', '設計', '使いやすさや、行動・参加のハードルを下げる設計を考える。'],
+  ['03', '運営', 'AIを活用しながら、サービスの開発と改善を進める。'],
 ];
 
 export function AboutView() {
@@ -21,15 +21,15 @@ export function AboutView() {
         <div className="about-hero__copy">
           <p className="eyebrow">Profile</p>
           <h1>Hello,<br />I'm <em>NeU.</em></h1>
-          <p>iOSアプリとWebツールをつくる個人開発者。生成AIを相棒に、アイデアを動くものへ変えています。</p>
+          <p>個人でアプリやWebサービスの企画・設計・運営に取り組んでいます。</p>
           <a className="btn btn--primary" href="mailto:yukak367@gmail.com">メッセージを送る <span className="btn__icon" aria-hidden="true">↗</span></a>
         </div>
         <div className="profile-card">
           <div className="profile-card__avatar"><img src="/icon.JPG" alt="NeU" width={2048} height={2048} /></div>
           <div className="profile-card__data">
             <b>NeU</b>
-            <span>個人開発者 · 愛知</span>
-            <span className="profile-card__status">制作中</span>
+            <span>企画・設計・運営 · 愛知</span>
+            <span className="profile-card__status">活動中</span>
           </div>
         </div>
       </section>
@@ -39,8 +39,9 @@ export function AboutView() {
           <p className="eyebrow">About</p>
           <h2 id="about-story-title" className="section-title">わたしについて</h2>
           <div className="about-copy" style={{ marginTop: 32 }}>
-            <p>愛知を拠点に、iOSアプリやWebツールを個人開発しています。生成AIは、企画・仕様づくり・実装を一緒に進める相棒です。小さくつくり、実際に動かし、リリースまで持っていくのが好きです。</p>
-            <p>このブログでは、開発の試行錯誤やUI・体験づくりに加えて、身近な疑問をデータや計算で掘り下げた記録を書いています。完成品だけでなく、迷ったことや失敗まで、次に試せる形で残します。</p>
+            <p>はじめまして、NeUです。個人でアプリやWebサービスの企画・設計・運営に取り組んでいます。</p>
+            <p>ユーザーの課題を整理し、必要な機能や使い方を考え、AIを活用しながら開発と改善を進めています。使いやすさや、行動・参加のハードルを下げる設計に関心があります。</p>
+            <p>このブログでは、プロダクトづくりの中で考えたことや判断したこと、AIの活用について書いています。</p>
           </div>
         </div>
         <div>
@@ -53,7 +54,7 @@ export function AboutView() {
 
       <section className="section" style={{ paddingTop: 0 }} aria-labelledby="interest-title">
         <div className="section-head">
-          <div><p className="eyebrow">Now</p><h2 id="interest-title" className="section-title">つくっているもの</h2></div>
+          <div><p className="eyebrow">Work</p><h2 id="interest-title" className="section-title">取り組んでいること</h2></div>
         </div>
         <div className="interest-grid">
           {interests.map(([number, title, text]) => (

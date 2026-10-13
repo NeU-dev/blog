@@ -36,10 +36,13 @@ const structuredData = {
 };
 ---
 <BaseLayout title="日記・分析記事一覧" currentPage="diary" description={description} structuredData={structuredData}>
-  <section class="archive-hero archive-hero--diary"><span>コレクション / 日記</span><h1>日々の<br />寄り道</h1><p>日々の出来事と、何気ない発見。</p></section>
-  <section class="logs-section logs-section--archive">
-    <div class="section-kicker"><span>DIARY ARCHIVE / {String(posts.length).padStart(3, '0')}件</span><h2>日記・分析記事一覧</h2></div>
-    <div class="log-filters"><a href="/">すべて</a><a href="/tech/">技術</a><a class="is-active" href="/diary/">日記 <sup>{posts.length}</sup></a></div>
-    <div class="logs-grid">{posts.map((post, index) => <PostCard client:visible title={post.data.title} excerpt={post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : '')} date={post.data.pubDate.toLocaleDateString('ja-JP')} category="diary" slug={post.data.permalink || post.slug} reactionSlug={post.slug} collection="diary" coverImage={post.data.coverImage} index={index} featured={index === 0} />)}</div>
+  <section class="page-head container">
+    <p class="eyebrow">Archive / Diary · {String(posts.length).padStart(2, '0')}</p>
+    <h1>日々の<mark>寄り道</mark></h1>
+    <p>日々の出来事と、何気ない発見。気になったことは、データや計算でちょっと掘り下げてみます。</p>
+    <nav class="filters" aria-label="記事の種類"><a href="/">すべて</a><a href="/tech/">技術</a><a class="is-active" aria-current="page" href="/diary/">日記 <sup>{posts.length}</sup></a></nav>
+  </section>
+  <section class="section section--tight container">
+    <div class="post-grid">{posts.map((post, index) => <div class:list={['post-slot', { 'post-slot--featured': index === 0 }]} data-reveal style={`--rv-i:${index === 0 ? 0 : index % 3};--rv-r:${index % 2 ? 2 : -2}deg`}><PostCard client:visible title={post.data.title} excerpt={post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : '')} date={post.data.pubDate.toLocaleDateString('ja-JP')} category="diary" slug={post.data.permalink || post.slug} reactionSlug={post.slug} collection="diary" coverImage={post.data.coverImage} index={index} featured={index === 0} /></div>)}</div>
   </section>
 </BaseLayout>

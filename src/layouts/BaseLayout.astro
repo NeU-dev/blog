@@ -54,8 +54,21 @@ const structuredDataJson = structuredData
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;600;700;800&family=Press+Start+2P&family=DotGothic16&display=swap" />
-    <meta name="theme-color" content="#e3ece6" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700;800;900&family=Press+Start+2P&family=DotGothic16&display=swap" />
+    <meta name="theme-color" content="#f1f3f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1c20" media="(prefers-color-scheme: dark)" />
+    <script is:inline>
+      (() => {
+        const root = document.documentElement;
+        try {
+          const savedTheme = localStorage.getItem('neulog-theme');
+          if (savedTheme === 'light' || savedTheme === 'dark') root.dataset.theme = savedTheme;
+        } catch {}
+        // Scroll-reveal hides content until the effects script runs; never leave it hidden.
+        root.classList.add('fx');
+        setTimeout(() => { if (!root.dataset.fxReady) root.classList.remove('fx'); }, 3000);
+      })();
+    </script>
     <meta property="og:locale" content="ja_JP" />
     <meta property="og:site_name" content="NeULOG" />
     <meta property="og:type" content={type} />
@@ -85,15 +98,19 @@ const structuredDataJson = structuredData
       gtag('config', 'G-96MQWWQ70F');
     </script>}
   </head>
-  <body id="top" class="min-h-screen bg-background flex flex-col relative overflow-x-hidden">
+  <body id="top">
     <a href="#main-content" class="skip-link">本文へ移動</a>
     <Header currentPage={currentPage} />
-    <main id="main-content" class="flex-grow relative">
+    <main id="main-content">
       <slot />
     </main>
     <Footer />
     <GameLauncher client:load showButton={false} />
     <script>
+      import { initFx } from '../lib/fx';
+      document.documentElement.dataset.fxReady = '1';
+      initFx();
+
       document.querySelectorAll('[data-open-game]').forEach(button => {
         button.addEventListener('click', () => window.dispatchEvent(new Event('open-neulog-game')));
       });
@@ -102,6 +119,22 @@ const structuredDataJson = structuredData
         const target = document.querySelector('[data-side-quest-message]');
         if (target) target.textContent = `今日のおまけ：${quests[Math.floor(Math.random() * quests.length)]}`;
       });
+
+      const root = document.documentElement;
+      const prefersDark = matchMedia('(prefers-color-scheme: dark)');
+      document.querySelectorAll('[data-theme-toggle]').forEach(button => {
+        button.addEventListener('click', () => {
+          const current = root.dataset.theme ?? (prefersDark.matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('neulog-theme', next); } catch {}
+        });
+      });
+
+      const header = document.querySelector('.site-header');
+      const markScrolled = () => header?.classList.toggle('is-scrolled', scrollY > 8);
+      markScrolled();
+      addEventListener('scroll', markScrolled, { passive: true });
     </script>
   </body>
 </html>

@@ -2,8 +2,6 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { getCollection } from 'astro:content';
 import { PostCard } from '../components/PostCard';
-import { HeroConsole } from '../components/HeroConsole';
-import { MeshyShowcase } from '../components/MeshyShowcase';
 import { Leaderboard } from '../components/Leaderboard';
 import { VisitorTicket } from '../components/VisitorTicket';
 import { getNoteArticles, NOTE_PROFILE_URL } from '../lib/note-feed';
@@ -16,6 +14,9 @@ const allPosts = [
   ...diaryPosts.map(post => ({ title: post.data.title, category: 'diary' as const, publicSlug: post.data.permalink || post.slug, reactionSlug: post.slug, description: post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : ''), coverImage: post.data.coverImage, pubDate: post.data.pubDate })),
   ...notePosts.map(post => ({ title: post.title, category: 'note' as const, publicSlug: post.url, reactionSlug: undefined, description: post.description, coverImage: post.coverImage, pubDate: post.pubDate, externalUrl: post.url })),
 ].sort((a, b) => b.pubDate.valueOf() - a.pubDate.valueOf());
+const titleLines = ['つくりかけも、', 'おもしろい。'];
+const topicsB = ['MAKE', 'PLAY', 'BREAK', 'SHIP', 'LOG', 'REPEAT'];
+const topics = ['iOS / SwiftUI', '生成AI', 'Web / Electron', 'Astro', 'データ分析', '個人開発', 'つくりかけ'];
 
 const site = Astro.site ?? new URL('https://neu-dev.net');
 const homeDescription = 'iOSアプリやWebツールを個人開発。生成AIを相棒にした開発の試行錯誤と、身近な疑問をデータや計算で掘り下げた記録を書くNeUのブログ。';
@@ -51,51 +52,76 @@ const homeStructuredData = {
   image="/images/og/neulog-home.png"
   structuredData={homeStructuredData}
 >
-  <section class="home-hero" aria-label="NeUの個人開発と寄り道の記録">
-    <div class="home-hero__sticky">
-      <MeshyShowcase client:visible />
-      <div class="home-hero__inner">
-        <div class="hero-copy">
-          <div class="status-ribbon"><i aria-hidden="true"></i> NEU'S FIELD NOTES</div>
-          <h1>つくりかけも、<br /><em>おもしろい。</em></h1>
-          <p>iOSアプリも、Webも、身近な「なんで？」も。<br />生成AIを相棒に、つくって考えたことを残す場所。</p>
-          <div class="hero-actions">
-            <a href="#latest" class="pixel-button pixel-button--purple hero-latest">最新の記事を読む <span aria-hidden="true">↘</span></a>
-            <span class="hero-byline">WRITTEN BY NeU</span>
-          </div>
-          <div class="hero-topics" aria-label="いまの領域"><span>iOS / SwiftUI</span><span>生成AI</span><span>Web / Electron</span><span>データ分析</span></div>
-        </div>
-        <div class="hero-console-stack">
-          <HeroConsole client:visible />
-          <button type="button" class="pixel-button game-launcher-button" data-open-game><span class="game-launcher-icon" aria-hidden="true">▶</span><span>ブロック崩しで遊ぶ</span><span aria-hidden="true">↗</span></button>
+  <section class="hero" aria-label="NeUの個人開発と寄り道の記録">
+    <div class="container hero__grid">
+      <div class="hero__copy">
+        <p class="eyebrow">NeU's field notes</p>
+        <h1 class="hero__title" aria-label={titleLines.join('')}>
+          <span aria-hidden="true">{[...titleLines[0]].map((char, i) => <span class="ch" style={`--i:${i}`}>{char}</span>)}</span>
+          <span aria-hidden="true"><mark>{[...titleLines[1]].map((char, i) => <span class="ch" style={`--i:${i + titleLines[0].length}`}>{char}</span>)}</mark></span>
+        </h1>
+        <p class="hero__lead">iOSアプリも、Webも、身近な<b>「なんで？」</b>も。<br />生成AIを相棒に、つくって考えたことを残す場所。</p>
+        <div class="hero__actions">
+          <a href="#latest" class="btn btn--primary">最新の記事を読む <span class="btn__icon" aria-hidden="true">↓</span></a>
+          <a href="/about/" class="btn btn--ghost">書いている人 <span class="btn__icon" aria-hidden="true">☺</span></a>
         </div>
       </div>
-      <div class="home-hero__scroll-cue" aria-hidden="true">
-        <span>SCROLL TO EXPLORE</span><i></i>
+      <div class="hero__device">
+        <button type="button" class="device" data-open-game data-hero-device aria-label="ブロック崩しで遊ぶ（画面は自動プレイのデモ）">
+          <span class="device__top"><b>NEU-BOY</b><span class="device__live">AUTO PLAY</span></span>
+          <span class="device__screen"><canvas width="768" height="440" aria-hidden="true"></canvas></span>
+          <span class="device__bottom">
+            <span class="device__dpad" aria-hidden="true"></span>
+            <span class="device__hint">PRESS TO PLAY ▶</span>
+            <span class="device__ab" aria-hidden="true"><i>B</i><i>A</i></span>
+          </span>
+        </button>
+        <span class="sticker sticker--new" aria-hidden="true">遊べる！</span>
       </div>
+    </div>
+    <div class="tickers" aria-hidden="true">
+      <div class="ticker ticker--b"><div class="ticker__track">{[...topicsB, ...topicsB, ...topicsB, ...topicsB].map(word => <span>{word}</span>)}</div></div>
+      <div class="ticker ticker--a"><div class="ticker__track">{[...topics, ...topics, ...topics, ...topics].map(topic => <span>{topic}</span>)}</div></div>
     </div>
   </section>
 
-  <section id="latest" class="logs-section">
-    <div class="logs-heading">
-      <div class="section-kicker"><h2>最近のログ</h2><span>LATEST NOTES / {String(allPosts.length).padStart(2, '0')}</span></div>
-      <nav class="log-filters" aria-label="記事の種類">
-        <a class="is-active" aria-current="page" href="/">すべて</a><a href="/tech/">技術</a><a href="/diary/">日記</a>{notePosts.length > 0 && <a class="log-note-link" href={NOTE_PROFILE_URL} target="_blank" rel="noopener noreferrer">note ↗</a>}
+  <section id="latest" class="section container" aria-labelledby="latest-title">
+    <header class="section-head" data-reveal>
+      <div>
+        <p class="eyebrow">Latest notes</p>
+        <h2 id="latest-title" class="section-title">最近のログ<span class="count">{String(allPosts.length).padStart(2, '0')}</span></h2>
+      </div>
+      <nav class="filters" aria-label="記事の種類">
+        <a class="is-active" aria-current="page" href="/">すべて</a><a href="/tech/">技術</a><a href="/diary/">日記</a>{notePosts.length > 0 && <a href={NOTE_PROFILE_URL} target="_blank" rel="noopener noreferrer">note ↗</a>}
       </nav>
-    </div>
-    <div class="logs-grid">
+    </header>
+    <div class="post-grid">
       {allPosts.map((post, index) => (
-        <PostCard client:visible title={post.title} excerpt={post.description} date={post.pubDate.toLocaleDateString('ja-JP')} category={post.category} slug={post.publicSlug} reactionSlug={post.reactionSlug} collection={post.category} coverImage={post.coverImage} externalUrl={post.externalUrl} index={index} featured={index === 0 && post.category !== 'note'} />
+        <div class:list={['post-slot', { 'post-slot--featured': index === 0 }]} data-reveal style={`--rv-i:${index === 0 ? 0 : index % 3};--rv-r:${index % 2 ? 2 : -2}deg`}><PostCard client:visible title={post.title} excerpt={post.description} date={post.pubDate.toLocaleDateString('ja-JP')} category={post.category} slug={post.publicSlug} reactionSlug={post.reactionSlug} collection={post.category} coverImage={post.coverImage} externalUrl={post.externalUrl} index={index} featured={index === 0} /></div>
       ))}
     </div>
     {allPosts.length === 0 && <div class="empty-state"><b>まだ記事がありません</b><span>最初の記事を準備中です。</span></div>}
   </section>
 
-  <section class="arcade-strip" aria-label="ブロック崩し">
-    <span class="arcade-symbol" aria-hidden="true">✳</span>
-    <div><span class="eyebrow">A LITTLE BREAK</span><h2>考える合間に、ひとゲーム。</h2><p>ブロックを崩して、頭をちょっとほぐそう。</p></div>
-    <button type="button" class="pixel-button" data-open-game>ブロック崩しで遊ぶ <span aria-hidden="true">↗</span></button>
+  <section class="playground" aria-labelledby="playground-title">
+    <div class="container playground__grid">
+      <div class="playground__intro" data-reveal>
+        <span class="playground__coin" aria-hidden="true">INSERT COIN ▶</span>
+        <p class="eyebrow">Playground</p>
+        <h2 id="playground-title" class="playground__title">考える合間に、<br /><em>ひとゲーム。</em></h2>
+        <p class="playground__lead">ブロックを崩して、頭をちょっとほぐそう。1面勝負のスコアは、となりのランキングに載ります。</p>
+        <button type="button" class="btn btn--primary" data-open-game><span aria-hidden="true">▶</span> ブロック崩しで遊ぶ</button>
+        <VisitorTicket client:visible />
+      </div>
+      <div data-reveal style="--rv-r: 3deg; --rv-i: 2">
+        <Leaderboard client:visible />
+      </div>
+    </div>
   </section>
-  <div class="home-visitor"><VisitorTicket client:visible /></div>
-  <Leaderboard client:visible />
 </BaseLayout>
+
+<script>
+  import { mountHeroScreen } from '../lib/hero-screen';
+  const device = document.querySelector<HTMLElement>('[data-hero-device]');
+  if (device) mountHeroScreen(device);
+</script>

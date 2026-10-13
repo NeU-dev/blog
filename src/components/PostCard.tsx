@@ -15,7 +15,12 @@ interface PostCardProps {
   featured?: boolean;
 }
 
-export function PostCard({ title, excerpt, date, category, slug, reactionSlug = slug, collection, coverImage, externalUrl, index = 0, featured = false }: PostCardProps) {
+const categoryLabel = { tech: '技術', diary: '日記', note: 'note' } as const;
+const placeholderGlyph = { tech: '</>', diary: ':-)', note: 'note' } as const;
+// Cards sit inside separate islands, so :nth-child can't vary them — the index does.
+const popColors = ['var(--mist)', 'var(--lilac)', 'var(--aqua)', 'var(--steel)'];
+
+export function PostCard({ title, excerpt, date, slug, reactionSlug = slug, collection, coverImage, externalUrl, index = 0, featured = false }: PostCardProps) {
   const [reactions, setReactions] = useState<Record<string, number>>({});
   useEffect(() => {
     if (collection === 'note' || !reactionSlug) return;
@@ -23,28 +28,28 @@ export function PostCard({ title, excerpt, date, category, slug, reactionSlug = 
   }, [collection, reactionSlug]);
   const blocks = [reactions.spark || 0, reactions.try || 0, reactions.broke || 0];
   const totalReactions = blocks.reduce((sum, value) => sum + value, 0);
-  const showMedia = featured || collection === 'note';
   return (
-    <article className={`log-card log-card--${collection} ${featured ? 'log-card--featured' : ''}`}>
-      <a href={externalUrl ?? `/${collection}/${slug}/`} {...(externalUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
-        <div className="log-card__window"><span aria-hidden="true">● ● ●</span><span>{collection} / {String(index + 1).padStart(2, '0')}</span></div>
-        {showMedia && <div className="log-card__media">
-          {coverImage ? <img src={coverImage} alt="" loading="lazy" decoding="async" width={1200} height={675} /> : (
-            <div className="log-card__placeholder" aria-hidden="true">
-              <span>{collection === 'tech' ? '</>' : collection === 'note' ? 'note' : ':-)'}</span>
-              <i />
-            </div>
-          )}
-        </div>}
-        <div className="log-card__body">
-          <div className="log-card__meta"><span>{collection === 'tech' ? '技術 · 個人開発' : collection === 'note' ? 'note · 外部記事' : '日記 · 分析'}</span><time>{date.replaceAll('/', '.')}</time></div>
-          <h3>{title}</h3>
-          {excerpt && <p>{excerpt}</p>}
-          {totalReactions > 0 && <div className="log-card__reactions" aria-label={`${totalReactions} reactions`}>
+    <article className={`post-card post-card--${collection}${featured ? ' post-card--featured' : ''}`} style={{ '--c': popColors[index % popColors.length] } as React.CSSProperties}>
+      <a className="post-card__link" href={externalUrl ?? `/${collection}/${slug}/`} {...(externalUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
+        <div className="post-card__media">
+          {featured && <span className="post-card__new" aria-hidden="true">NEW!</span>}
+          {coverImage
+            ? <img src={coverImage} alt="" loading={featured ? 'eager' : 'lazy'} decoding="async" width={1200} height={675} />
+            : <div className="post-card__placeholder" aria-hidden="true">{placeholderGlyph[collection]}</div>}
+        </div>
+        <div className="post-card__body">
+          <div className="post-card__meta">
+            <span className={`cat cat--${collection}`}>{categoryLabel[collection]}</span>
+            <time>{date.replaceAll('/', '.')}</time>
+            {externalUrl && <span className="post-card__external">外部 ↗</span>}
+          </div>
+          <h3 className="post-card__title"><span>{title}</span></h3>
+          {excerpt && <p className="post-card__excerpt">{excerpt}</p>}
+          {totalReactions > 0 && <div className="post-card__reactions" aria-label={`リアクション ${totalReactions}件`}>
             {blocks.map((count, group) => Array.from({ length: Math.min(count, 7) }, (_, i) => <i key={`${group}-${i}`} className={`reaction-brick reaction-brick--${group}`} />))}
-            <span>{totalReactions} ブロック</span>
+            <span>{totalReactions}</span>
           </div>}
-          <span className="log-card__read">{collection === 'note' ? 'noteで読む' : '記事を読む'} <b>↗</b></span>
+          {featured && <span className="post-card__cta">{externalUrl ? 'noteで読む' : '記事を読む'} <b aria-hidden="true">→</b></span>}
         </div>
       </a>
     </article>

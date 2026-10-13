@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from "./ui/button";
 import { Share2, Bookmark, Check } from "lucide-react";
 
 interface PostActionsProps {
@@ -91,33 +90,24 @@ export function PostActions({ slug, title }: PostActionsProps) {
   };
 
   return (
-    <div className="flex gap-2">
-      <Button
+    <div className="post-actions">
+      <button
+        type="button"
         aria-label={isBookmarked ? 'ブックマークを外す' : 'ブックマーク'}
-        variant="outline"
-        size="icon"
-        className={`rounded-full transition-all ${
-          isBookmarked
-            ? 'bg-yellow-500/20 text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/30'
-            : 'hover:bg-primary/10 hover:text-primary hover:border-primary/50'
-        }`}
+        aria-pressed={isBookmarked}
+        className={`icon-button${isBookmarked ? ' is-on' : ''}`}
         onClick={handleBookmark}
       >
         <Bookmark size={18} className={isBookmarked ? 'fill-current' : ''} />
-      </Button>
-      <Button
-        aria-label="記事を共有"
-        variant="outline"
-        size="icon"
-        className={`rounded-full transition-all ${
-          showCopied
-            ? 'bg-green-500/20 text-green-500 border-green-500/50'
-            : 'hover:bg-primary/10 hover:text-primary hover:border-primary/50'
-        }`}
+      </button>
+      <button
+        type="button"
+        aria-label={showCopied ? 'URLをコピーしました' : '記事を共有'}
+        className={`icon-button${showCopied ? ' is-on' : ''}`}
         onClick={handleShare}
       >
         {showCopied ? <Check size={18} /> : <Share2 size={18} />}
-      </Button>
+      </button>
     </div>
   );
 }

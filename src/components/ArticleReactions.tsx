@@ -27,7 +27,7 @@ export function ArticleReactions({ slug }: { slug: string }) {
     } catch { setMessage('少し時間をおいて試してね'); }
   };
   return <section className="reaction-panel">
-    <span>ADD A BLOCK TO THIS LOG</span><h2>この記事、どうだった？</h2>
+    <p className="eyebrow">Add a block</p><h2>この記事、どうだった？</h2>
     <div className="reaction-buttons">{reactions.map(item => <button key={item.id} onClick={() => react(item.id)} className={selected.includes(item.id) ? 'is-active' : ''}><b>{item.icon}</b><span>{item.label}</span><em>{counts[item.id] || 0}</em></button>)}</div>
     <div className="reaction-wall" aria-hidden="true">{reactions.flatMap((item, group) => Array.from({ length: Math.min(counts[item.id] || 0, 16) }, (_, i) => <i key={`${item.id}-${i}`} className={`reaction-brick reaction-brick--${group}`} />))}</div>
     <small>{message}</small>

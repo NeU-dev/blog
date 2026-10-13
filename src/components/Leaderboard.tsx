@@ -27,28 +27,27 @@ export function Leaderboard() {
   const topScore = visibleScores[0]?.score || 0;
   const gap = topScore && personalBest ? Math.max(0, topScore - personalBest) : null;
 
-  return <section className="leaderboard-section">
-    <div className="section-kicker"><span>ONE RUN / 1面勝負</span><h2>ブロック崩しランキング</h2></div>
-    <div className="leaderboard-rules" aria-label="得点ルール">
-      <span>端打ち <b>次の破壊 ×2</b></span>
-      <span>連続破壊 <b>最大 ×4</b></span>
-      <span>速攻・残機 <b>クリア加点</b></span>
-    </div>
-    <div className="leaderboard-summary">
-      <span>あなたの端末ベスト</span>
-      <b>{personalBest ? personalBest.toLocaleString() : '未挑戦'}</b>
-      <em>{gap === null ? 'まずは1面クリア！' : gap === 0 ? '現在トップ圏内！' : `首位まで あと ${gap.toLocaleString()}`}</em>
-    </div>
-    <div className="leaderboard-board">{visibleScores.length ? visibleScores.map((row, i) => {
+  return <div className="leaderboard">
+    <div className="leaderboard__head"><h3>ブロック崩しランキング</h3><span>TOP 10 · 1面勝負</span></div>
+    {visibleScores.length ? <ol className="leaderboard__list">{visibleScores.map((row, i) => {
       const leaderGap = Math.max(0, topScore - row.score);
       const meter = topScore ? Math.max(8, (row.score / topScore) * 100) : 0;
-      return <div className={`leaderboard-row leaderboard-row--${Math.min(i + 1, 4)}`} key={`${row.player_name}-${i}`}>
-        <span className="leaderboard-rank">{i === 0 ? '♛' : String(i + 1).padStart(2, '0')}</span>
-        <span className="leaderboard-player"><b>{row.player_name}</b><small>{i === 0 ? 'トップを防衛中' : `首位差 ${leaderGap.toLocaleString()}`}</small></span>
-        <span className="leaderboard-score"><em>{row.score.toLocaleString()}</em><i><u style={{ width: `${meter}%` }} /></i></span>
-      </div>;
-    }) : <div className="leaderboard-empty"><span>--</span><b>最初のプレイヤーになろう</b><em>0</em></div>}</div>
-    <button className="pixel-button pixel-button--pink" onClick={() => window.dispatchEvent(new Event('open-neulog-game'))}>▶ 1面勝負に挑戦</button>
+      return <li className={`leaderboard__row leaderboard__row--${Math.min(i + 1, 4)}`} key={`${row.player_name}-${i}`}>
+        <span className="leaderboard__rank">{i === 0 ? '♛' : String(i + 1).padStart(2, '0')}</span>
+        <span className="leaderboard__player"><b>{row.player_name}</b><small>{i === 0 ? 'トップを防衛中' : `首位差 ${leaderGap.toLocaleString()}`}</small></span>
+        <span className="leaderboard__score"><em>{row.score.toLocaleString()}</em><i><u style={{ width: `${meter}%` }} /></i></span>
+      </li>;
+    })}</ol> : <p className="leaderboard__empty">{offline ? 'ランキングを読み込めませんでした' : '最初のプレイヤーになろう'}</p>}
+    <div className="leaderboard__me">
+      <span>あなたの端末ベスト</span>
+      <b>{personalBest ? personalBest.toLocaleString() : '—'}</b>
+      <em>{gap === null ? 'まずは1面クリア！' : gap === 0 ? '現在トップ圏内！' : `首位まで あと ${gap.toLocaleString()}`}</em>
+    </div>
+    <ul className="leaderboard__rules" aria-label="得点ルール">
+      <li>端打ち <b>次の破壊 ×2</b></li>
+      <li>連続破壊 <b>最大 ×4</b></li>
+      <li>速攻・残機 <b>クリア加点</b></li>
+    </ul>
     {offline && <small>オフライン中 / ブログとゲームはそのまま楽しめます</small>}
-  </section>;
+  </div>;
 }

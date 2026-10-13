@@ -36,10 +36,13 @@ const structuredData = {
 };
 ---
 <BaseLayout title="技術記事一覧" currentPage="tech" description={description} structuredData={structuredData}>
-  <section class="archive-hero archive-hero--tech"><span>コレクション / 技術</span><h1>技術の<br />実験ログ</h1><p>つくって、壊して、理解したこと。</p></section>
-  <section class="logs-section logs-section--archive">
-    <div class="section-kicker"><span>TECH ARCHIVE / {String(posts.length).padStart(3, '0')}件</span><h2>技術記事一覧</h2></div>
-    <div class="log-filters"><a href="/">すべて</a><a class="is-active" href="/tech/">技術 <sup>{posts.length}</sup></a><a href="/diary/">日記</a></div>
-    <div class="logs-grid">{posts.map((post, index) => <PostCard client:visible title={post.data.title} excerpt={post.data.description} date={post.data.pubDate.toLocaleDateString('ja-JP')} category="tech" slug={post.slug} collection="tech" coverImage={post.data.coverImage} index={index} featured={index === 0} />)}</div>
+  <section class="page-head container">
+    <p class="eyebrow">Archive / Tech · {String(posts.length).padStart(2, '0')}</p>
+    <h1>技術の<mark>実験ログ</mark></h1>
+    <p>つくって、壊して、理解したこと。iOS・生成AI・Webの個人開発で試したことをまとめています。</p>
+    <nav class="filters" aria-label="記事の種類"><a href="/">すべて</a><a class="is-active" aria-current="page" href="/tech/">技術 <sup>{posts.length}</sup></a><a href="/diary/">日記</a></nav>
+  </section>
+  <section class="section section--tight container">
+    <div class="post-grid">{posts.map((post, index) => <div class:list={['post-slot', { 'post-slot--featured': index === 0 }]} data-reveal style={`--rv-i:${index === 0 ? 0 : index % 3};--rv-r:${index % 2 ? 2 : -2}deg`}><PostCard client:visible title={post.data.title} excerpt={post.data.description} date={post.data.pubDate.toLocaleDateString('ja-JP')} category="tech" slug={post.slug} collection="tech" coverImage={post.data.coverImage} index={index} featured={index === 0} /></div>)}</div>
   </section>
 </BaseLayout>

@@ -6,6 +6,7 @@ const SITE_VISITOR_KEY = 'site/neulog';
 export function VisitorTicket() {
   const [visitNumber, setVisitNumber] = useState<number | null>(null);
   const [offline, setOffline] = useState(false);
+  const [shown, setShown] = useState(0);
 
   useEffect(() => {
     communityApi<{ visitNumber: number }>('visit', { method: 'POST', body: { slug: SITE_VISITOR_KEY } })
@@ -13,15 +14,26 @@ export function VisitorTicket() {
       .catch(() => setOffline(true));
   }, []);
 
+  // Slot-machine style count-up to the visitor number.
+  useEffect(() => {
+    if (visitNumber === null) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { setShown(visitNumber); return; }
+    let frame = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / 1400);
+      const eased = 1 - Math.pow(1 - t, 4);
+      setShown(Math.round(visitNumber * eased));
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [visitNumber]);
+
   if (offline) return null;
 
-  return <aside className={`visitor-ticket visitor-ticket--home ${visitNumber === null ? 'is-loading' : ''}`} aria-live="polite">
-    <div className="visitor-ticket__stub"><span>ようこそ</span><b>♥</b><i>プレイヤー</i></div>
-    <div className="visitor-ticket__main">
-      <span>NeULOGへようこそ</span>
-      <strong>No. {visitNumber === null ? '····' : String(visitNumber).padStart(4, '0')}</strong>
-      <p>{visitNumber === null ? '番号を読み込み中…' : `あなたはこのブログを訪れた ${visitNumber}人目のプレイヤーです`}</p>
-    </div>
-    <div className="visitor-ticket__holes" aria-hidden="true">••••••</div>
-  </aside>;
+  return <p className={`visitor${visitNumber === null ? ' is-loading' : ''}`} aria-live="polite">
+    <b><small>No.</small>{visitNumber === null ? '····' : String(shown).padStart(4, '0')}</b>
+    <span>{visitNumber === null ? '番号を読み込み中…' : `あなたはNeULOGを訪れた ${visitNumber}人目のプレイヤーです`}</span>
+  </p>;
 }

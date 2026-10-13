@@ -95,7 +95,8 @@ const formattedDate = pubDate.toLocaleDateString('ja-JP', {
   modifiedTime={(updatedDate ?? pubDate).toISOString()}
   structuredData={structuredData}
 >
-  <div class="min-h-screen">
+  <div class="read-progress" aria-hidden="true"><i></i></div>
+  <div class="post-page">
     <PostHeader
       client:load
       title={title}
@@ -106,8 +107,8 @@ const formattedDate = pubDate.toLocaleDateString('ja-JP', {
       coverImage={coverImage}
     />
 
-    <div class="article-shell">
-      <article class="prose article-body" data-article-slug={`${category}/${reactionSlug}`}>
+    <div class="article-shell container">
+      <article class="article-body" data-article-slug={`${category}/${reactionSlug}`}>
         <slot />
       </article>
       <ArticleReactions client:visible slug={`${category}/${reactionSlug}`} />
@@ -139,12 +140,13 @@ const formattedDate = pubDate.toLocaleDateString('ja-JP', {
         startOnLoad: false,
         theme: 'base',
         themeVariables: {
-          primaryColor: '#edf2e9',
-          primaryTextColor: '#283c34',
-          primaryBorderColor: '#afbdad',
-          lineColor: '#657469',
-          secondaryColor: '#f2f1df',
-          tertiaryColor: '#fffdf1'
+          fontFamily: 'Geist, "Noto Sans JP", sans-serif',
+          primaryColor: '#8ecdf5',
+          primaryTextColor: '#2a2d32',
+          primaryBorderColor: '#2a2d32',
+          lineColor: '#2a2d32',
+          secondaryColor: '#a3e6d8',
+          tertiaryColor: '#ffffff'
         }
       });
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Portfolio } from './Portfolio';
 
 const skills = [
   ['プロダクト企画', 'PLAN'],
@@ -7,11 +8,6 @@ const skills = [
   ['AIの活用', 'AI'],
   ['サービス運営', 'OPERATE'],
   ['改善・検証', 'IMPROVE'],
-];
-const interests = [
-  ['01', '企画', 'ユーザーの課題を整理し、必要な機能を考える。'],
-  ['02', '設計', '使いやすさや、行動・参加のハードルを下げる設計を考える。'],
-  ['03', '運営', 'AIを活用しながら、サービスの開発と改善を進める。'],
 ];
 
 export function AboutView() {
@@ -52,18 +48,7 @@ export function AboutView() {
         </div>
       </section>
 
-      <section className="section" style={{ paddingTop: 0 }} aria-labelledby="interest-title">
-        <div className="section-head">
-          <div><p className="eyebrow">Work</p><h2 id="interest-title" className="section-title">取り組んでいること</h2></div>
-        </div>
-        <div className="interest-grid">
-          {interests.map(([number, title, text]) => (
-            <article key={title}>
-              <span>{number}</span><h3>{title}</h3><p>{text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+      <Portfolio className="portfolio--about" />
     </div>
   );
 }

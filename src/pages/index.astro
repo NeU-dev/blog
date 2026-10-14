@@ -4,6 +4,7 @@ import { getCollection } from 'astro:content';
 import { PostCard } from '../components/PostCard';
 import { Leaderboard } from '../components/Leaderboard';
 import { VisitorTicket } from '../components/VisitorTicket';
+import { Portfolio } from '../components/Portfolio';
 import { getNoteArticles, NOTE_PROFILE_URL } from '../lib/note-feed';
 
 const techPosts = await getCollection('tech', ({ data }) => !data.draft);
@@ -63,6 +64,7 @@ const homeStructuredData = {
         <div class="hero__actions">
           <a href="#latest" class="btn btn--primary">最新の記事を読む <span class="btn__icon" aria-hidden="true">↓</span></a>
           <a href="/about/" class="btn btn--ghost">書いている人 <span class="btn__icon" aria-hidden="true">☺</span></a>
+          <a href="#portfolio" class="btn btn--ghost">制作物を見る <span class="btn__icon" aria-hidden="true">↓</span></a>
         </div>
       </div>
       <div class="hero__device">
@@ -83,6 +85,8 @@ const homeStructuredData = {
       <div class="ticker ticker--a"><div class="ticker__track">{[...topics, ...topics, ...topics, ...topics].map(topic => <span>{topic}</span>)}</div></div>
     </div>
   </section>
+
+  <Portfolio className="container" />
 
   <section id="latest" class="section container" aria-labelledby="latest-title">
     <header class="section-head" data-reveal>

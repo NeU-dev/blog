@@ -20,6 +20,7 @@ export function Footer() {
             <div>
               <span>MORE</span>
               <a href="/about/">わたしについて</a>
+              <a href="/about/#portfolio">制作したアプリ・サービス</a>
               <a href="/rss.xml">RSS</a>
               <button type="button" data-side-quest>おまけを引く ⚄</button>
             </div>

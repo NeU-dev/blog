@@ -427,6 +427,12 @@ html.fx [data-reveal].is-in { opacity: 1; transform: none; }
 .article-poll__continuation { margin-top: 32px; }
 .article-poll--invalid { padding: 20px; border: 2px dashed var(--steel); border-radius: var(--radius); }
 
+/* mission finder（本体のスタイルは styles/mission-finder.css。ここは読み込み中の表示だけ） */
+.mission-finder { margin: 2.4em 0; }
+.mission-finder:not([data-enhanced="true"]) { display: grid; place-items: center; min-height: 200px; border: 2px dashed var(--ink); border-radius: var(--radius-lg); }
+.mission-finder:not([data-enhanced="true"]) > * { display: none; }
+.mission-finder:not([data-enhanced="true"])::before { content: 'ミッション・ファインダーを読み込み中…'; color: var(--muted); font-size: 14px; }
+
 /* reactions + end */
 .reaction-panel { margin-top: clamp(56px, 7vw, 80px); padding: clamp(22px, 3.4vw, 32px); border: 3px solid var(--ink); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 8px 8px 0 var(--ice); }
 .reaction-panel h2 { margin: 12px 0 22px; font-size: 24px; font-weight: 900; letter-spacing: -.03em; }

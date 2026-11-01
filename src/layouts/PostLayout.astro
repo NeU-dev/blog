@@ -123,6 +123,13 @@ const formattedDate = pubDate.toLocaleDateString('ja-JP', {
     const article = document.querySelector<HTMLElement>('.article-body[data-article-slug]');
     if (article) {
       initArticlePolls(article);
+      // ミッション・ファインダーは、置かれている記事でだけ読み込む
+      const missionFinder = article.querySelector<HTMLElement>('.mission-finder');
+      if (missionFinder) {
+        import('../lib/mission-finder/app.js')
+          .then(({ mountMissionFinder }) => mountMissionFinder(missionFinder))
+          .catch(error => console.error('mission_finder_failed', error));
+      }
       const articleSlug = article.dataset.articleSlug;
       if (articleSlug) {
         communityApi('visit', { method: 'POST', body: { slug: articleSlug } }).catch(() => undefined);

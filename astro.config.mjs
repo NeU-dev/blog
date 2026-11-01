@@ -40,6 +40,12 @@ function remarkAdmonitions() {
             : { class: 'article-poll article-poll--invalid' };
           return;
         }
+        // ::mission-finder → ミッション・ファインダーを置く枠。中身は記事ページのスクリプトが描く。
+        if (node.type !== 'textDirective' && node.name === 'mission-finder') {
+          data.hName = 'section';
+          data.hProperties = { class: 'mission-finder', 'aria-label': 'ミッション・ファインダー' };
+          return;
+        }
         const tagName = node.type === 'textDirective' ? 'span' : 'div';
 
         data.hName = tagName;

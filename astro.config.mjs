@@ -94,9 +94,6 @@ export default defineConfig({
   redirects: {
     '/diary/2026-08-25-駅徒歩30分級の居酒屋は1日何人で黒字-新時代-尾張旭店を損益分岐点で分析':
       '/diary/shinjidai-owariasahi/',
-    // ブログエディタがファイル名を文字化けさせ、「い」の抜けた URL で一度公開された
-    '/tech/2026-10-27-あなたには作りたものがありますか-個人開発':
-      '/tech/2026-10-27-あなたには作りたいものがありますか-個人開発/',
   },
   integrations: [
     react(),

@@ -68,21 +68,3 @@ export function computeScores(state, uptoIndex = STEPS.length) {
 
   return { raw, offered, normalized, ranking, evidence, targets, directions, regulations, unknown, ambiguous };
 }
-
-// 好き・嫌いの6項目それぞれに、どの気持ちが出ていたか（A・Bの答えから。多く出た順）
-export function motivesByItem(state) {
-  const items = [
-    ...state.likes.map((label, index) => ({ kind: 'like', index, label })),
-    ...state.dislikes.map((label, index) => ({ kind: 'dislike', index, label })),
-  ];
-  return items.map((item) => {
-    const counts = {};
-    STEPS.forEach((step) => {
-      const a = state.answers[step.id];
-      if (step.kind !== 'choice' || !a?.item || a.item.kind !== item.kind || a.item.index !== item.index) return;
-      a.chosen.forEach((o) => (o.codes || []).forEach((c) => { counts[c] = (counts[c] || 0) + 1; }));
-    });
-    const codes = Object.keys(counts).sort((x, y) => counts[y] - counts[x] || CODES.indexOf(x) - CODES.indexOf(y));
-    return { ...item, codes };
-  });
-}

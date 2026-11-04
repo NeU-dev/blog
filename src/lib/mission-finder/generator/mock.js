@@ -1,5 +1,5 @@
 // 開発用の偽のAI。`npm run dev` 中に記事URLへ ?mission-ai=mock を付けると使われる。
-// APIキーなしで、AI版の流れ（言い換え・引用つき分析・次の問い・ミッション候補・読み解き・安全の確認・上限）を試すためのもの。
+// APIキーなしで、AI版の流れ（言い換え・掘る問いの計画・その場の問い・引用つき分析・ミッション候補・読み解き・安全の確認・上限）を試すためのもの。
 // ?mission-ai=mock-limit なら、最初から「今日の上限に達した」状態を再現する。
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,12 +33,35 @@ export function mockTransport({ limit = false } = {}) {
           { code: 'K2', quote: 'この文は本文にない引用', basis: 'testimony' },
         ],
         safety: /死にたい|消えたい/.test(body.text) ? 'concern' : 'none',
-        followUp: body.followUp ? `［偽AI］「${first.slice(0, 12)}」と感じたのは、なぜだと思いますか？` : '',
+      };
+    }
+
+    // 型の並びはメニューの逆順（テンプレ版と違う順番になることを確かめるため）。「なぜ」は画面側で必ず先頭に入る
+    if (action === 'plan') {
+      const types = [...body.menu].reverse().map((m) => m.type).slice(0, body.count);
+      return {
+        probes: types.map((type) => {
+          const m = body.menu.find((x) => x.type === type);
+          return {
+            type,
+            reason: `［偽AI］${m.purpose.slice(0, 20)}`,
+            title: m.live || m.fixed ? '' : `［偽AI］「${body.item}」${m.question.replace(/^.*?(?=[、。]|$)/, '')}`.slice(0, 40).replace(/[？?]?$/, '？'),
+            options: m.slots.map((s) => ({ slot: s.slot, label: `［偽AI］${s.template}`.slice(0, 26) })),
+          };
+        }),
+        freeQuestion: `［偽AI］「${body.item}」で、いちばん心が動いた場面は？`,
+      };
+    }
+
+    if (action === 'ask') {
+      return {
+        title: body.kind === 'bridge' ? `［偽AI］「${body.item}」と「${body.other}」に共通するのは？` : `［偽AI］「${body.context.at(-1).answer.slice(0, 12)}」が、なぜ大事？`,
+        options: body.slots.map((s) => ({ slot: s.slot, label: `［偽AI］${s.template}`.slice(0, 26) })),
       };
     }
 
     if (action === 'missions') {
-      const word = body.episode.about || body.likes[0];
+      const word = body.likes[0];
       return {
         candidates: body.codes.map((code) => ({
           code,

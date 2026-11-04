@@ -6,16 +6,19 @@
 //   resultCopy(ctx)              → 結果画面の文章（作れそうなもの・次の問いなど）
 //
 // 選択肢は「スロット方式」：動機コードの枠を固定し、各枠の文言だけをつくる。
-// AI版はこの文言を、本人の好き・嫌いに合わせて言い換える。
+// AI版は、文言を本人の答えに合わせて書き換え、「掘る」問いの型の順番も選ぶ（ctx.types / ctx.wording で渡ってくる）。
 
 import { CODES, CODE_INFO, DIRECTIONS, ROLES, DISTANCES } from '../codes.js';
-import { indexOfStep } from '../flow.js';
-import { computeScores, motivesByItem } from '../scoring.js';
-import { mark, seededShuffle, truncate } from '../text.js';
+import { STEPS, PROBE_COUNT, indexOfStep } from '../flow.js';
+import { computeScores } from '../scoring.js';
+import { mark, plain, seededShuffle, truncate } from '../text.js';
 
 const none = (label = 'どれも違う／わからない', tags = {}) => ({ id: 'none', label, none: true, tags });
+const quote = (s) => `「${s}」`;
+const likeOf = (state) => state.likes[0];
+const dislikeOf = (state) => state.dislikes[0];
 
-// AI版が言い換える質問と、その種類
+// AI版が文言を言い換える、全員に聞く問いと、その種類
 export const SLOT_TYPES = {
   likeAttraction: 'attraction',
   likeMoment: 'moment',
@@ -23,29 +26,34 @@ export const SLOT_TYPES = {
   dislikeInverse: 'inverse',
 };
 
-// --- A・B：スロットの定義 -------------------------------------------------
+// スロットのIDから、測る気持ちのコードへ（K3e・K3x はどちらも K3。相手のスロットは気持ちを測らない）
+function codesOf(id, slot) {
+  if (slot.codes) return slot.codes;
+  if (id === 'K3e' || id === 'K3x') return ['K3'];
+  return CODES.includes(id) ? [id] : [];
+}
+
+// --- A・B：全員に聞く問い ---------------------------------------------------
 
 const LIKE_ATTRACTION = {
-  K3e: { codes: ['K3'], label: 'その時間そのものが心地いい', tags: { sub: 'enjoy' } },
-  K3x: { codes: ['K3'], label: '奥深さや仕組みを知っていくのが楽しい', tags: { sub: 'explore' } },
+  K3e: { label: 'その時間そのものが心地いい', tags: { sub: 'enjoy' } },
+  K3x: { label: '奥深さや仕組みを知っていくのが楽しい', tags: { sub: 'explore' } },
   K4: { label: 'それ自体に、代わりのきかない良さがある' },
   K5: { label: '自分の腕や工夫が活きる' },
   K6: { label: '誰かとつながるきっかけになる' },
   K7: { label: '人に認められる手応えがある' },
   K1: { label: '誰かを楽にしたり、喜ばせたりできる' },
 };
-const LIKE_ATTRACTION_ORDER = ['K3e', 'K3x', 'K4', 'K5', 'K6', 'K7', 'K1'];
 
 const LIKE_MOMENT = {
   K1: { label: '誰かが、ほっとした顔をしたとき', tags: { target: 'close' } },
   K6: { label: '誰かと一緒に楽しめたとき', tags: { target: 'community' } },
   K7: { label: '「すごいね」と言われたとき', tags: { target: 'self' } },
-  K3e: { codes: ['K3'], label: '夢中になって、時間を忘れているとき', tags: { target: 'self', sub: 'enjoy' } },
-  K3x: { codes: ['K3'], label: '新しい発見や「なるほど」があったとき', tags: { target: 'culture', sub: 'explore' } },
+  K3e: { label: '夢中になって、時間を忘れているとき', tags: { target: 'self', sub: 'enjoy' } },
+  K3x: { label: '新しい発見や「なるほど」があったとき', tags: { target: 'culture', sub: 'explore' } },
   K4: { label: 'その良さを、しみじみ味わえたとき', tags: { target: 'culture' } },
   K5: { label: '自分なりのやり方が、うまくいったとき', tags: { target: 'self' } },
 };
-const LIKE_MOMENT_ORDER = ['K1', 'K6', 'K7', 'K3e', 'K3x', 'K4', 'K5'];
 
 const DISLIKE_WHAT = {
   K7: { label: '損をしたり、軽く見られたりする' },
@@ -55,7 +63,6 @@ const DISLIKE_WHAT = {
   K2: { label: '筋が通っていない、おかしい' },
   K4: { label: '大切なものが、雑に扱われる' },
 };
-const DISLIKE_WHAT_ORDER = ['K7', 'K5', 'K6', 'K1', 'K2', 'K4'];
 
 const DISLIKE_INVERSE = {
   K4: { label: '大切なものが、大切に扱われる', tags: { direction: 'protect' } },
@@ -65,30 +72,16 @@ const DISLIKE_INVERSE = {
   K2: { label: '筋の通った、フェアな形になる', tags: { direction: 'relieve' } },
   K5: { label: '一人ひとりが、自分で選べるようになる', tags: { direction: 'expand' } },
 };
-const DISLIKE_INVERSE_ORDER = ['K4', 'K6', 'K7', 'K1', 'K2', 'K5'];
 
-// 1問に5枠だけ出し、3項目でローテーションして各コードの出る回数をそろえる
-function rotate(order, qIndex, show = 5) {
-  const drop = order.length - show;
-  const start = (qIndex * drop) % order.length;
-  const dropped = new Set(Array.from({ length: drop }, (_, k) => (start + k) % order.length));
-  return order.filter((_, i) => !dropped.has(i));
-}
-
-function slotQuestion(step, defs, order, { title, sub, max, kind, items }) {
-  const options = rotate(order, step.item).map((key) => ({
-    id: key,
-    label: defs[key].label,
-    codes: defs[key].codes || [key],
-    tags: defs[key].tags || {},
-  }));
+function slotQuestion(step, defs, { title, sub, max, kind, item }) {
+  const options = Object.entries(defs).map(([id, s]) => ({ id, label: s.label, codes: codesOf(id, s), tags: s.tags || {} }));
   return {
     title,
     sub,
     max,
     weight: 1,
-    item: { kind, index: step.item },
-    options: [...seededShuffle(options, `${step.id}:${items[step.item]}`), none()],
+    item: { kind, index: 0 },
+    options: [...seededShuffle(options, `${step.id}:${item}`), none()],
   };
 }
 
@@ -99,138 +92,432 @@ function pickedTag(state, stepId, key) {
   return o && !o.none ? o[key] : undefined;
 }
 
-// A・Bで選んだ数が多い項目ほど「反応が強い」とみなす（上位の動機を含むと +1）
-function itemIntensity(state, kind, topCode) {
-  const list = kind === 'like' ? state.likes : state.dislikes;
-  const score = list.map(() => 0);
-  Object.values(state.answers).forEach((a) => {
-    if (!a.item || a.item.kind !== kind) return;
-    a.chosen.forEach((o) => {
-      if (o.none) return;
-      score[a.item.index] += 1;
-      if (topCode && o.codes.includes(topCode)) score[a.item.index] += 1;
-    });
-  });
-  return score;
-}
-
-const argmax = (arr) => arr.reduce((best, v, i) => (v > arr[best] ? i : best), 0);
-
-function topItem(state, kind, topCode) {
-  return argmax(itemIntensity(state, kind, topCode));
-}
-
-// 指定した動機コードを選んだ回数がいちばん多い項目
-function itemFor(state, kind, codes) {
-  const list = kind === 'like' ? state.likes : state.dislikes;
-  const score = list.map(() => 0);
-  Object.values(state.answers).forEach((a) => {
-    if (!a.item || a.item.kind !== kind) return;
-    a.chosen.forEach((o) => { if (o.codes?.some((c) => codes.includes(c))) score[a.item.index] += 1; });
-  });
-  return list[argmax(score)];
-}
-
-const likeFor = (state, codes) => itemFor(state, 'like', codes);
-const dislikeFor = (state, codes) => itemFor(state, 'dislike', codes);
+const labelsOf = (state, id) => (state.answers[id]?.chosen || []).filter((o) => !o.none).map((o) => o.label);
 const hasSignal = (scores) => CODES.some((c) => scores.normalized[c] > 0);
 
-// --- C：見極めの質問バンク --------------------------------------------------
+// 掘る問いのうち、指定した型で答えたもの（選んだ文言）
+function probeAnswer(state, side, type) {
+  const step = STEPS.find((s) => s.gen === 'probe' && s.side === side && state.answers[s.id]?.chosen?.[0]?.probe === type);
+  return step ? labelsOf(state, step.id) : [];
+}
+
+// 好き・嫌いそれぞれの「掘った流れ」と、2つをつなぐ答え（結果画面と、AIへの材料に使う）
+export function chainsOf(state) {
+  const c1 = state.answers.C1?.chosen?.[0];
+  return {
+    like: {
+      item: likeOf(state),
+      links: [
+        { label: '惹かれるところ', values: labelsOf(state, 'A1') },
+        { label: '満たされる瞬間', values: labelsOf(state, 'A2') },
+        { label: 'そこで手に入れているもの', values: probeAnswer(state, 'like', 'why') },
+        { label: '大事にしていること', values: probeAnswer(state, 'like', 'value') },
+      ],
+    },
+    dislike: {
+      item: dislikeOf(state),
+      links: [
+        { label: 'イヤなところ', values: labelsOf(state, 'B1') },
+        { label: '損なわれているもの', values: probeAnswer(state, 'dislike', 'why') },
+        { label: '見過ごせない理由', values: probeAnswer(state, 'dislike', 'value') },
+        { label: '代わりにほしい状態', values: labelsOf(state, 'B2') },
+      ],
+    },
+    bridge: c1 && !c1.none && c1.bridge ? { code: c1.bridge, label: c1.label } : null,
+  };
+}
+
+// --- 見極め（2つの気持ちを見分ける二択） -----------------------------------------
 // 研究レポートの境界検査（K1/K2、K3/K4/K5、K4/K6、K6/K7 など）を、反実仮想の2択にしたもの。
 
 const BOUNDARY_BANK = [
-  { id: 'K1K2', priority: true, build: () => ({
+  { id: 'K1K2', side: 'dislike', priority: true, build: () => ({
     title: '誰も困っていなくても、筋が通らないことは正したい？',
     options: { K2: '正したい。おかしいものはおかしい', K1: '困る人がいないなら、そこまでは気にならない' },
   }) },
-  { id: 'K3K4', priority: true, build: (s) => {
-    const L = mark(likeFor(s, ['K3', 'K4']));
-    return {
-      title: 'どっちのほうが、つらい？',
-      options: { K4: `${L}そのものが、世の中から消えてしまう`, K3: `自分が${L}に使える時間が、なくなってしまう` },
-    };
-  } },
-  { id: 'K3K5', priority: true, build: (s) => ({
-    title: `上達も成果もまったくなくても、${mark(likeFor(s, ['K3', 'K5']))}を続けたい？`,
+  { id: 'K3K4', side: 'like', priority: true, build: (s) => ({
+    title: 'どっちのほうが、つらい？',
+    options: { K4: `${mark(likeOf(s))}そのものが、世の中から消えてしまう`, K3: `自分が${mark(likeOf(s))}に使える時間が、なくなってしまう` },
+  }) },
+  { id: 'K3K5', side: 'like', priority: true, build: (s) => ({
+    title: `上達も成果もまったくなくても、${mark(likeOf(s))}を続けたい？`,
     options: { K3: '続けたい。やること自体が好き', K5: '伸びていく手応えがないと、物足りない' },
   }) },
-  { id: 'K4K6', priority: true, build: (s) => ({
-    title: `自分が関われなくても、${mark(likeFor(s, ['K4', 'K6']))}が世の中に続いていくなら？`,
+  { id: 'K4K6', side: 'like', priority: true, build: (s) => ({
+    title: `自分が関われなくても、${mark(likeOf(s))}が世の中に続いていくなら？`,
     options: { K4: 'それで十分うれしい', K6: '自分や仲間が関われないなら、さみしい' },
   }) },
-  { id: 'K6K7', priority: true, build: () => ({
+  { id: 'K6K7', side: 'any', priority: true, build: () => ({
     title: 'どっちのほうが、うれしい？',
     options: { K6: '安心していられる居場所がある', K7: 'みんなから一目置かれる' },
   }) },
-  { id: 'K5K7', build: () => ({
+  { id: 'K5K7', side: 'any', build: () => ({
     title: 'どっちのほうが、燃える？',
     options: { K5: '昨日の自分を超えること', K7: '誰かに勝つこと、認められること' },
   }) },
-  { id: 'K1K7', build: () => ({
+  { id: 'K1K7', side: 'any', build: () => ({
     title: '誰にも知られずに、誰かを助けられるとしたら？',
     options: { K1: 'それで十分、満足できる', K7: '少しは知ってほしい。手応えがほしい' },
   }) },
-  { id: 'K2K6', build: () => ({
+  { id: 'K2K6', side: 'any', build: () => ({
     title: '仲のいい人が、おかしなことをしていたら？',
     options: { K2: '関係がこじれても、はっきり伝える', K6: '関係を壊さない伝え方を、まず考える' },
   }) },
-  { id: 'K1K4', build: (s) => ({
-    title: `${mark(dislikeFor(s, ['K1', 'K4']))}について、より気になるのは？`,
+  { id: 'K1K4', side: 'dislike', build: (s) => ({
+    title: `${mark(dislikeOf(s))}について、より気になるのは？`,
     options: { K1: 'そこで、しんどい思いをしている人がいること', K4: '大切なものが、損なわれていくこと' },
   }) },
-  { id: 'K3K6', build: (s) => ({
-    title: `${mark(likeFor(s, ['K3', 'K6']))}は、どっちが楽しい？`,
+  { id: 'K3K6', side: 'like', build: (s) => ({
+    title: `${mark(likeOf(s))}は、どっちが楽しい？`,
     options: { K3: 'ひとりで、とことん', K6: '誰かと一緒に' },
   }) },
-  { id: 'K5K6', build: () => ({
+  { id: 'K5K6', side: 'any', build: () => ({
     title: '何かをつくるなら、どっちが好き？',
     options: { K5: '自分の思うように、ひとりで形にする', K6: 'みんなで相談しながら、一緒に形にする' },
   }) },
 ].map((p) => ({ ...p, codes: [p.id.slice(0, 2), p.id.slice(2)] }));
 
-// A・B・自由記述1までのスコアで、上位の動機どうし・差が小さいペアを優先して5つ選ぶ
-function planBoundary(state) {
-  const s = computeScores(state, indexOfStep('C1'));
+// その時点のスコアで、上位どうし・差が小さいペアを選ぶ（すでに聞いたペアは除く）
+function boundaryPair(state, step, side) {
+  const idx = indexOfStep(step.id);
+  const s = computeScores(state, idx);
   const n = s.normalized;
   const top = new Set(s.ranking.slice(0, 4));
-  const scored = BOUNDARY_BANK.map((p, i) => {
+  const used = new Set(STEPS.slice(0, idx).map((st) => state.answers[st.id]?.chosen?.[0]?.pair).filter(Boolean));
+  const pool = BOUNDARY_BANK.filter((p) => !used.has(p.id) && (side === 'any' || p.side === 'any' || p.side === side));
+  const scored = (pool.length ? pool : BOUNDARY_BANK).map((p, i) => {
     const [x, y] = p.codes;
     let v = n[x] + n[y] - Math.abs(n[x] - n[y]);
     if (top.has(x) && top.has(y)) v += 1;
     if (p.priority) v += 0.15;
     return { p, v, i };
   }).sort((a, b) => b.v - a.v || a.i - b.i);
-
-  const picked = [];
-  const use = {};
-  for (const { p } of scored) {
-    if (picked.length === 5) break;
-    if (p.codes.some((c) => (use[c] || 0) >= 3)) continue;
-    picked.push(p);
-    p.codes.forEach((c) => { use[c] = (use[c] || 0) + 1; });
-  }
-  for (const { p } of scored) {
-    if (picked.length === 5) break;
-    if (!picked.includes(p)) picked.push(p);
-  }
-  return picked;
+  return scored[0].p;
 }
 
-// 動かされ方（自己決定理論の調整様式）は、気持ちそのものではなく「行動を続けている理由」で聞く。
-// いちばん反応が強かった「好き」について聞き、結果の「動かされ方のメモ」に使う（スコアには入れない）。
+function boundaryQuestion(step, state, side) {
+  const pair = boundaryPair(state, step, side);
+  const b = pair.build(state);
+  const tags = { pair: pair.id, probe: 'boundary' };
+  const opts = pair.codes.map((c) => ({ id: c, label: b.options[c], codes: [c], tags }));
+  return {
+    title: b.title,
+    sub: '直感で、近いほうを1つ',
+    max: 1,
+    weight: 1.5,
+    item: side === 'any' ? null : { kind: side, index: 0 },
+    options: [...seededShuffle(opts, `${step.id}:${pair.id}`), none('どちらとも言えない', { ...tags, ambiguous: pair.codes })],
+  };
+}
+
+// --- 掘る問い（型） -------------------------------------------------------------
+// AI版では、AIが型の順番を選び、問いと選択肢の文を本人の答えに合わせて書く。
+// live：直前の答えを受けて、その場でAIが書く型（「なぜ」をもう一段掘る value）
+// fixed：AIは順番だけ選び、文は決まったものを使う型
+
+const ctxLine = (label, values) => (values.length ? `${label}：${values.join('、')}` : undefined);
+
+export const PROBES = {
+  like: {
+    why: {
+      purpose: '満たされる瞬間に、本当は何を手に入れているのか（一段上の理由）',
+      title: () => 'その瞬間、あなたが本当に手に入れているのは？',
+      context: (state) => ctxLine('満たされる瞬間', labelsOf(state, 'A2')),
+      slots: {
+        K3e: { label: '時間を忘れるほどの没頭' },
+        K3x: { label: '「わかった」「なるほど」という発見' },
+        K4: { label: 'かけがえのないものに、触れている感覚' },
+        K5: { label: '自分の力が通じた、という手応え' },
+        K6: { label: '誰かと一緒にいる、という安心' },
+        K7: { label: '認められた、勝てた、という誇らしさ' },
+        K1: { label: '誰かの役に立てた、という実感' },
+      },
+    },
+    value: {
+      live: true,
+      purpose: '「手に入れているもの」が、なぜうれしいのか（大事にしている価値）。why のあとに置く',
+      title: () => 'それが手に入ると、なぜうれしい？',
+      context: (state) => ctxLine('手に入れているもの', probeAnswer(state, 'like', 'why')),
+      slots: {
+        K1: { label: '誰かの役に立てている、と思えるから' },
+        K2: { label: '正しいことをしている、と思えるから' },
+        K3: { label: '生きている実感が、湧いてくるから' },
+        K4: { label: '大切なものが、ここにあると思えるから' },
+        K5: { label: '自分を信じられるようになるから' },
+        K6: { label: 'ひとりじゃない、と思えるから' },
+        K7: { label: '自分の価値を、確かめられるから' },
+      },
+    },
+    loss: {
+      purpose: '失ったら何が惜しいかで、本当に大事な部分を確かめる',
+      title: (L) => `もし一生${L}ができなくなったら、いちばん惜しいのは？`,
+      slots: {
+        K3e: { label: '何も考えずに没頭できる時間' },
+        K3x: { label: 'まだ知らないことを知っていく楽しみ' },
+        K4: { label: 'それ自体の良さに、触れられること' },
+        K5: { label: '腕を磨いて、うまくなっていく道のり' },
+        K6: { label: 'それを通じた、人とのつながり' },
+        K7: { label: '認められたり、勝てたりする場' },
+        K1: { label: '誰かを喜ばせられる機会' },
+      },
+    },
+    exception: {
+      purpose: 'どんなときは楽しくないか（例外）から、楽しさの条件を確かめる',
+      title: (L) => `どんなときの${L}は、楽しくない？`,
+      slots: {
+        K5: { label: 'やり方を決められて、やらされるとき' },
+        K6: { label: '一緒にやる人と、ギスギスしているとき' },
+        K7: { label: '誰にも見てもらえず、反応がないとき' },
+        K3e: { label: '作業みたいになって、没頭できないとき' },
+        K2: { label: 'ズルや不公平がまかり通っているとき' },
+        K4: { label: '大事にしてきたものが、雑に扱われるとき' },
+        K1: { label: '誰かがつらそうにしているとき' },
+      },
+    },
+    spread: {
+      purpose: '人に勧めるなら何を味わってほしいか（自分の外へ向ける価値）',
+      title: (L) => `${L}を人に勧めるなら、何を味わってほしい？`,
+      slots: {
+        K3e: { label: '時間を忘れて夢中になる感じ' },
+        K3x: { label: '知るほど面白くなる奥深さ' },
+        K6: { label: '人とつながれる楽しさ' },
+        K5: { label: '自分でもできた、という手応え' },
+        K4: { label: 'それ自体の、代わりのきかない良さ' },
+        K1: { label: 'しんどいときの、逃げ場になること' },
+        K7: { label: 'うまくなって、認められる喜び' },
+      },
+    },
+    origin: {
+      purpose: '好きになったきっかけから、気持ちの出どころを確かめる',
+      title: (L) => `${L}を好きになったきっかけに、いちばん近いのは？`,
+      slots: {
+        K6: { label: '一緒にやる人や、誘ってくれた人がいた' },
+        K3e: { label: 'やってみたら、とにかく楽しかった' },
+        K3x: { label: '仕組みや奥深さに、引き込まれた' },
+        K5: { label: 'できるようになるのが、うれしかった' },
+        K7: { label: '褒められたり、勝てたりした' },
+        K1: { label: 'つらい時期に、支えになった' },
+        K4: { label: 'その世界そのものに、心をつかまれた' },
+      },
+    },
+    boundary: {
+      fixed: true,
+      purpose: '点数が近い2つの気持ちを、二択で見分ける（2回まで）',
+    },
+  },
+  dislike: {
+    why: {
+      purpose: 'イヤなことで、何が損なわれていると感じるのか（一段上の理由）',
+      title: () => 'それで、何が損なわれていると感じる？',
+      context: (state) => ctxLine('イヤなところ', labelsOf(state, 'B1')),
+      slots: {
+        K1: { label: '心や体の、余裕' },
+        K2: { label: '公平さや、筋の通ったやり方' },
+        K4: { label: '大切なものや、大事な時間' },
+        K5: { label: '自分で選ぶ自由' },
+        K6: { label: '人と人との、いい関係' },
+        K7: { label: 'がんばりが報われること' },
+      },
+    },
+    value: {
+      live: true,
+      purpose: '「損なわれているもの」を、なぜ見過ごせないのか（大事にしている価値）。why のあとに置く',
+      title: () => 'それが損なわれるのを、なぜ見過ごせない？',
+      context: (state) => ctxLine('損なわれているもの', probeAnswer(state, 'dislike', 'why')),
+      slots: {
+        K1: { label: 'しんどい思いをする人を、放っておけないから' },
+        K2: { label: 'おかしいことは、おかしいと思うから' },
+        K4: { label: '一度失ったら、取り戻せないものだから' },
+        K5: { label: '自分のことは、自分で決めたいから' },
+        K6: { label: '人とのつながりが、何より大事だから' },
+        K7: { label: 'がんばった人が、報われてほしいから' },
+      },
+    },
+    who: {
+      fixed: true,
+      weight: 0,
+      purpose: 'いちばん困っているのは誰か（届けたい相手の手がかり）',
+      title: (D) => `${D}で、いちばん困っているのは誰だと思う？`,
+      slots: {
+        self: { label: '自分自身', tags: { target: 'self' } },
+        close: { label: '身近な家族や友だち', tags: { target: 'close' } },
+        community: { label: '同じ場にいる、仲間や人たち', tags: { target: 'community' } },
+        society: { label: '社会全体や、これからの世代', tags: { target: 'society' } },
+      },
+    },
+    exception: {
+      purpose: 'どんな条件なら許せるか（例外）から、本当にイヤな理由を確かめる',
+      title: (D) => `どんな条件なら、${D}を許せる？`,
+      noneLabel: 'どんな条件でも許せない／わからない',
+      slots: {
+        K2: { label: 'ちゃんとした理由があるなら' },
+        K1: { label: '誰もつらい思いをしないなら' },
+        K5: { label: '自分で選んだことなら' },
+        K4: { label: '大切なものが守られるなら' },
+        K6: { label: 'みんなが納得しているなら' },
+        K7: { label: 'がんばった分が報われるなら' },
+      },
+    },
+    reaction: {
+      purpose: 'その場面で自分がどう動きがちか（気持ちと、関わり方の手がかり）',
+      title: (D) => `${D}の場面で、あなたはどうしがち？`,
+      noneLabel: 'とくに何もせず、がまんする',
+      slots: {
+        K2: { label: '「おかしい」と声に出す' },
+        K5: { label: '自分なりに工夫して、うまくかわす' },
+        K6: { label: '誰かと話して、気持ちを分かち合う' },
+        K1: { label: '困っている人がいれば、手を貸す' },
+        K4: { label: '大切なものだけは、守ろうとする' },
+        K7: { label: '結果を出して、見返そうとする' },
+      },
+    },
+    power: {
+      purpose: '変えられる力があったら何から変えるか（向かいたい方向の手がかり）',
+      title: (D) => `もし${D}を変えられる力があったら、まず何を変える？`,
+      slots: {
+        K2: { label: 'ルールや仕組みそのもの' },
+        K1: { label: 'しんどい人が休める余白' },
+        K5: { label: '一人ひとりが選べる自由' },
+        K6: { label: '人と人の関わり方' },
+        K4: { label: '大切なものを守る決まり' },
+        K7: { label: 'がんばりがきちんと評価される仕組み' },
+      },
+    },
+    boundary: {
+      fixed: true,
+      purpose: '点数が近い2つの気持ちを、二択で見分ける（2回まで）',
+    },
+  },
+};
+
+// AIが使えないとき・AIの計画が足りないときの順番
+export const DEFAULT_ORDER = {
+  like: ['why', 'value', 'loss', 'boundary', 'spread', 'exception', 'origin'],
+  dislike: ['why', 'value', 'who', 'exception', 'boundary', 'power', 'reaction'],
+};
+
+// AIが選んだ順番を、決まりに合わせて直す。
+// 「なぜ」は必ず入れる。「もう一段なぜ（value）」は「なぜ（why）」のあと。見極めは2回まで、ほかは1回まで。
+export function repairTypes(types, side) {
+  const count = PROBE_COUNT[side];
+  const out = [];
+  const used = {};
+  const ok = (t) => Boolean(PROBES[side][t])
+    && (used[t] || 0) < (t === 'boundary' ? 2 : 1)
+    && (t !== 'value' || out.includes('why'));
+  const add = (t) => { out.push(t); used[t] = (used[t] || 0) + 1; };
+  if (!(types || []).includes('why')) add('why');
+  for (const t of types || []) if (out.length < count && ok(t)) add(t);
+  for (const t of [...DEFAULT_ORDER[side], 'boundary']) if (out.length < count && ok(t)) add(t);
+  return out.slice(0, count);
+}
+
+// 選択肢は6つまで。多いときは、その時点で点数がいちばん低い気持ちの枠を外す
+function limitSlots(ids, defs, scores, max = 6) {
+  if (ids.length <= max) return ids;
+  const strength = (id) => Math.max(0, ...codesOf(id, defs[id]).map((c) => scores.normalized[c]));
+  const keep = new Set([...ids].sort((a, b) => strength(b) - strength(a) || ids.indexOf(a) - ids.indexOf(b)).slice(0, max));
+  return ids.filter((id) => keep.has(id));
+}
+
+function probeQuestion(step, { state, scores, types, wording }) {
+  const side = step.side;
+  const type = repairTypes(types, side)[step.index];
+  if (type === 'boundary') return boundaryQuestion(step, state, side);
+  const def = PROBES[side][type];
+  const item = side === 'like' ? likeOf(state) : dislikeOf(state);
+  const ids = limitSlots(Object.keys(def.slots), def.slots, scores);
+  const options = ids.map((id) => ({
+    id,
+    label: (!def.fixed && wording?.labels?.[id]) || def.slots[id].label,
+    codes: codesOf(id, def.slots[id]),
+    tags: { ...(def.slots[id].tags || {}), probe: type },
+  }));
+  return {
+    title: (!def.fixed && wording?.title) || def.title(mark(item)),
+    sub: 'いちばん近いものを1つ',
+    context: def.context?.(state),
+    max: 1,
+    weight: def.weight ?? 1,
+    item: { kind: side, index: 0 },
+    probe: type,
+    options: [...seededShuffle(options, `${step.id}:${type}:${item}`), none(def.noneLabel, { probe: type })],
+  };
+}
+
+// AIに型を選んでもらうときに渡すメニュー
+export function probeMenu(state, side) {
+  const item = side === 'like' ? likeOf(state) : dislikeOf(state);
+  return Object.entries(PROBES[side]).map(([type, def]) => ({
+    type,
+    purpose: def.purpose,
+    live: Boolean(def.live),
+    fixed: Boolean(def.fixed),
+    question: def.title ? plain(def.title(mark(item))) : '',
+    slots: def.fixed || def.live ? [] : Object.entries(def.slots).map(([slot, s]) => ({ slot, template: s.label })),
+  }));
+}
+
+// その場でAIに書いてもらう問い（value）の材料：何を受けて聞くか
+export function liveAskRequest(state, side) {
+  const def = PROBES[side].value;
+  const first = side === 'like' ? 'A2' : 'B1';
+  const why = STEPS.find((s) => s.gen === 'probe' && s.side === side && state.answers[s.id]?.chosen?.[0]?.probe === 'why');
+  const qa = (id) => (state.answers[id] ? [{ question: plain(state.answers[id].qtext), answer: labelsOf(state, id).join('、') }] : []);
+  return {
+    kind: 'value',
+    side,
+    item: side === 'like' ? likeOf(state) : dislikeOf(state),
+    other: side === 'like' ? dislikeOf(state) : likeOf(state),
+    context: [...qa(first), ...(why ? qa(why.id) : [])].filter((c) => c.answer),
+    title: def.title(),
+    slots: Object.entries(def.slots).map(([slot, s]) => ({ slot, template: s.label })),
+  };
+}
+
+// --- C：好きと嫌いをつなぐ問い ------------------------------------------------------
+
+const SHARED = {
+  K1: 'しんどさを、ひとりで抱えなくていいこと',
+  K2: '筋が通っていて、フェアであること',
+  K3: '夢中になれる時間が、ちゃんとあること',
+  K4: '大切なものが、大切に扱われること',
+  K5: '自分で決めて、自分の力を出せること',
+  K6: '人と安心してつながれること',
+  K7: 'がんばりが、ちゃんと報われること',
+};
+
+const bridgeCodes = (scores) => scores.ranking.slice(0, 5);
+
+function bridgeContext(state) {
+  const { like, dislike } = chainsOf(state);
+  const pick = (links, i, j) => (links[i].values.length ? links[i].values : links[j].values).join('、');
+  return `好き：${pick(like.links, 2, 1)}　／　嫌い：${pick(dislike.links, 1, 0)}`;
+}
+
+export function bridgeAskRequest(state, scores) {
+  const { like, dislike } = chainsOf(state);
+  const links = (chain, side) => chain.links.filter((l) => l.values.length)
+    .map((l) => ({ question: `${side}「${chain.item}」の${l.label}`, answer: l.values.join('、') }));
+  return {
+    kind: 'bridge',
+    side: 'both',
+    item: like.item,
+    other: dislike.item,
+    context: [...links(like, '好き'), ...links(dislike, '嫌い')],
+    title: plain(`${mark(like.item)}で満たされるものと、${mark(dislike.item)}で損なわれるもの。2つに共通しているのは？`),
+    slots: bridgeCodes(scores).map((c) => ({ slot: c, template: SHARED[c] })),
+  };
+}
+
+// --- D・E：相手とミッション ---------------------------------------------------
+
 const REG_OPTIONS = [
   { id: 'INT', label: 'やっていて、楽しい・面白いから', tags: { regulation: 'INT' } },
   { id: 'ID', label: '大事なことだと、自分で納得しているから', tags: { regulation: 'ID' } },
   { id: 'INJ', label: 'やらないと、落ち着かない・焦るから', tags: { regulation: 'INJ' } },
   { id: 'EXT', label: 'まわりに期待されている・言われているから', tags: { regulation: 'EXT' } },
 ];
-
-function regulationItem(state) {
-  const s = computeScores(state, indexOfStep('C6'));
-  return state.likes[topItem(state, 'like', hasSignal(s) ? s.ranking[0] : null)];
-}
-
-// --- D・E：相手とミッション ---------------------------------------------------
 
 const T_PERSONA = {
   self: { label: '自分自身', persona: '自分自身' },
@@ -244,25 +531,10 @@ function topTarget(targets) {
   return keys.reduce((best, k) => ((targets[k] || 0) > (targets[best] || 0) ? k : best), 'society');
 }
 
-// 届けたい相手（D1）の時点のスコアで、いちばん反応が強かった好き・嫌いを選ぶ。
-// ミッション案（E2・E3）でも同じ基準を使い、D1の選択肢とずれないようにする。
-function anchorItems(state) {
-  const top = computeScores(state, indexOfStep('D1')).ranking[0];
-  return { D: state.dislikes[topItem(state, 'dislike', top)], L: state.likes[topItem(state, 'like', top)] };
-}
-
 const PAST_PERSONA = '昔の自分と同じところでつまずいている人';
 
 function primaryCode(state, scores) {
   return pickedTag(state, 'E1', 'primary') || scores.ranking[0];
-}
-
-// 6項目に共通していた気持ち：いちばん多くの項目に出ていたもの（同数なら order の順）
-export function threadOf(state, order) {
-  const items = motivesByItem(state);
-  const coverage = (c) => items.filter((item) => item.codes.includes(c)).length;
-  const code = [...order].sort((x, y) => coverage(y) - coverage(x))[0];
-  return { items, thread: coverage(code) >= 2 ? { code, count: coverage(code) } : null };
 }
 
 // --- ミッション候補 ---------------------------------------------------------------
@@ -270,7 +542,6 @@ export function threadOf(state, order) {
 // ここのテンプレ文は、AIが使えないときの受け皿。本人の項目を「」で引いて、その人の分野が入るようにする。
 // ブログ記事の例（「ものづくりの楽しさを伝播すること」）にならい、「〜こと」で終わる短い一文にする。
 
-const quote = (s) => `「${s}」`;
 const MISSION_TEMPLATE = {
   K1: (d) => `${d ? `${quote(d)}のような` : ''}しんどさを、一人で抱えこまなくていいようにすること`,
   K2: (d) => `${d ? `${quote(d)}のような` : ''}筋の通らないことを、少しずつ正していくこと`,
@@ -281,17 +552,11 @@ const MISSION_TEMPLATE = {
   K7: (l) => `${l ? `${quote(l)}で` : ''}がんばった人が、正当に認められるようにすること`,
 };
 
-// その気持ちがいちばん多く出ていた項目（苦しさ・おかしさは「嫌い」から、ほかは「好き」から）。出ていなければ null
+// その気持ちが出ていた項目（苦しさ・おかしさは「嫌い」から、ほかは「好き」から）。出ていなければ null
 function anchorFor(state, code) {
   const kind = code === 'K1' || code === 'K2' ? 'dislike' : 'like';
-  const list = kind === 'like' ? state.likes : state.dislikes;
-  const score = list.map(() => 0);
-  Object.values(state.answers).forEach((a) => {
-    if (a.item?.kind !== kind) return;
-    a.chosen.forEach((o) => { if (o.codes?.includes(code)) score[a.item.index] += 1; });
-  });
-  const i = argmax(score);
-  return score[i] > 0 ? list[i] : null;
+  const found = Object.values(state.answers).some((a) => a.item?.kind === kind && a.chosen.some((o) => o.codes?.includes(code)));
+  return found ? (kind === 'like' ? likeOf(state) : dislikeOf(state)) : null;
 }
 
 export function templateCandidate(state, code) {
@@ -310,18 +575,17 @@ export function templateCandidate(state, code) {
   };
 }
 
-// AIに候補を頼む気持ち：上位4つと、6つに共通していた気持ち（E1でどれを根っこに選んでも候補がそろうように）
+const bridgeCode = (state) => chainsOf(state).bridge?.code;
+
+// AIに候補を頼む気持ち：上位4つと、好きと嫌いをつなぐ気持ち（E1でどれを根っこに選んでも候補がそろうように）
 export function candidatePool(state, scores) {
-  const { thread } = threadOf(state, scores.ranking);
-  return [...new Set([...scores.ranking.slice(0, 4), thread?.code].filter(Boolean))];
+  return [...new Set([...scores.ranking.slice(0, 4), bridgeCode(state)].filter(Boolean))];
 }
 
-// E2 に出す候補：根っこ → 6つに共通していた気持ち → スコア順で4つ。AIの候補が無い気持ちはテンプレ文
+// E2 に出す候補：根っこ → 好きと嫌いをつなぐ気持ち → スコア順で4つ。AIの候補が無い気持ちはテンプレ文
 export function missionCandidateList(state, scores, aiCandidates) {
   const primary = primaryCode(state, scores);
-  const order = [primary, ...scores.ranking.filter((c) => c !== primary)];
-  const { thread } = threadOf(state, order);
-  const codes = [...new Set([primary, thread?.code, ...scores.ranking].filter(Boolean))]
+  const codes = [...new Set([primary, bridgeCode(state), ...scores.ranking].filter(Boolean))]
     .filter((c, i) => i === 0 || scores.normalized[c] > 0)
     .slice(0, 4);
   return codes.map((code) => aiCandidates?.find((c) => c.code === code) || templateCandidate(state, code));
@@ -336,105 +600,90 @@ function evidenceHint(list) {
   return c ? `選んだ答え：「${truncate(c.a, 28)}」` : 'まだ根拠が少ない気持ちです';
 }
 
-// AIが使えないとき（またはAIが次の問いを書けなかったとき）の、2回目の自由記述の問い
-const WHY_PROMPTS = {
-  K1: 'ここまでの答えには「苦しさを減らしたい」気持ちがよく出ていました。誰かのしんどさが、なぜあなたにとって見過ごせないのでしょう？',
-  K2: 'ここまでの答えには「おかしいことを正したい」気持ちがよく出ていました。筋の通らないことが、なぜ見過ごせないのでしょう？',
-  K3: 'ここまでの答えには「味わいたい・知りたい」気持ちがよく出ていました。何に、なぜそこまで惹かれるのだと思いますか？',
-  K4: 'ここまでの答えには「大切なものに応えたい」気持ちがよく出ていました。それはあなたにとって、なぜかけがえがないのでしょう？',
-  K5: 'ここまでの答えには「自分で決めて、形にしたい」気持ちがよく出ていました。なぜ「自分で」であることが大事なのでしょう？',
-  K6: 'ここまでの答えには「つながっていたい」気持ちがよく出ていました。誰と、どんな関係でいたいのでしょう？ それはなぜ？',
-  K7: 'ここまでの答えには「手応えや評価がほしい」気持ちがよく出ていました。誰に、どんなふうに認められたいのでしょう？ それはなぜ？',
-};
-
 // --- 質問ビルダー ------------------------------------------------------------
 
 const BUILDERS = {
-  likeAttraction: (step, { state }) => slotQuestion(step, LIKE_ATTRACTION, LIKE_ATTRACTION_ORDER, {
-    title: `${mark(state.likes[step.item])}の、どこに惹かれる？`,
+  likeAttraction: (step, { state }) => slotQuestion(step, LIKE_ATTRACTION, {
+    title: `${mark(likeOf(state))}の、どこに惹かれる？`,
     sub: '2つまで選べます',
     max: 2,
     kind: 'like',
-    items: state.likes,
+    item: likeOf(state),
   }),
 
-  likeMoment: (step, { state }) => slotQuestion(step, LIKE_MOMENT, LIKE_MOMENT_ORDER, {
-    title: `${mark(state.likes[step.item])}で、いちばん満たされるのはどんな瞬間？`,
+  likeMoment: (step, { state }) => slotQuestion(step, LIKE_MOMENT, {
+    title: `${mark(likeOf(state))}で、いちばん満たされるのはどんな瞬間？`,
     sub: 'いちばん近いものを1つ',
     max: 1,
     kind: 'like',
-    items: state.likes,
+    item: likeOf(state),
   }),
 
-  dislikeWhat: (step, { state }) => slotQuestion(step, DISLIKE_WHAT, DISLIKE_WHAT_ORDER, {
-    title: `${mark(state.dislikes[step.item])}の、何がいちばんイヤ？`,
+  dislikeWhat: (step, { state }) => slotQuestion(step, DISLIKE_WHAT, {
+    title: `${mark(dislikeOf(state))}の、何がいちばんイヤ？`,
     sub: '2つまで選べます',
     max: 2,
     kind: 'dislike',
-    items: state.dislikes,
+    item: dislikeOf(state),
   }),
 
-  dislikeInverse: (step, { state }) => slotQuestion(step, DISLIKE_INVERSE, DISLIKE_INVERSE_ORDER, {
-    title: `${mark(state.dislikes[step.item])}がなくなったら、代わりにどうなってほしい？`,
+  dislikeInverse: (step, { state }) => slotQuestion(step, DISLIKE_INVERSE, {
+    title: `${mark(dislikeOf(state))}がなくなったら、代わりにどうなってほしい？`,
     sub: 'いちばん近いものを1つ',
     max: 1,
     kind: 'dislike',
-    items: state.dislikes,
+    item: dislikeOf(state),
   }),
 
-  ftEpisode: (step, { state, scores }) => {
-    const top = hasSignal(scores) ? scores.ranking[0] : null;
-    const li = itemIntensity(state, 'like', top);
-    const di = itemIntensity(state, 'dislike', top);
-    // 同点なら「嫌い」を優先して提案する（感情が動いた場面を思い出しやすいため）
-    const candidates = [
-      ...state.dislikes.map((label, i) => ({ id: `d${i}`, label, v: di[i] })),
-      ...state.likes.map((label, i) => ({ id: `l${i}`, label, v: li[i] })),
-    ];
-    const best = candidates.reduce((b, c) => (c.v > b.v ? c : b), candidates[0]);
-    return {
-      title: '6つのうち、いちばん心が動いた「具体的な場面」をひとつ教えてください',
-      sub: 'いつ・どこで・何があった？ そのとき、どう感じた？',
-      about: {
-        hint: `答えを見ると、${mark(best.label)}への反応がいちばん強そうです。どの項目の話かを選ぶと、結果に残ります（選ばなくても大丈夫です）。`,
-        suggested: best.id,
-        options: [
-          ...state.likes.map((label, i) => ({ id: `l${i}`, label })),
-          ...state.dislikes.map((label, i) => ({ id: `d${i}`, label })),
-          { id: 'other', label: 'それ以外' },
-        ],
-      },
-      placeholder: '例：入社1年目のとき、同期が理不尽に怒られているのを見て、何も言えなかった。',
-      skippable: true,
-    };
-  },
+  probe: (step, ctx) => probeQuestion(step, ctx),
 
-  boundary: (step, { state }) => {
-    const pair = planBoundary(state)[step.index];
-    const b = pair.build(state);
-    const opts = pair.codes.map((c) => ({ id: c, label: b.options[c], codes: [c], tags: {} }));
+  // 動かされ方（自己決定理論の調整様式）は、気持ちそのものではなく「行動を続けている理由」で聞く。
+  // 結果の「動かされ方のメモ」に使う（スコアには入れない）
+  regulation: (step, { state }) => ({
+    title: `${mark(likeOf(state))}を続けているのは、なぜ？`,
+    sub: '近いものを2つまで',
+    max: 2,
+    weight: 0,
+    options: [...seededShuffle(REG_OPTIONS, `${step.id}:${likeOf(state)}`), none('正直、よくわからない', { regulation: 'UNK' })],
+  }),
+
+  // 自由記述の問いは、AI版では掘った答えに合わせてAIが書く（ctx.freeQuestion）
+  ftLike: (step, { state, freeQuestion }) => ({
+    title: freeQuestion || `${mark(likeOf(state))}で、忘れられない場面をひとつ教えてください`,
+    sub: 'いつ・どこで・誰と・何があった？ そのとき、どう感じた？',
+    placeholder: '例：初めて人前で弾いたとき、手が震えたけど、最後に拍手をもらえて泣きそうになった。',
+    skippable: true,
+  }),
+
+  ftDislike: (step, { state, freeQuestion }) => ({
+    title: freeQuestion || `${mark(dislikeOf(state))}で、いちばん許せなかった場面をひとつ教えてください`,
+    sub: 'いつ・どこで・何があった？ そのとき、どう感じた？',
+    placeholder: '例：後輩が理不尽に怒られているのに、自分も含めて誰も何も言えなかった。',
+    skippable: true,
+  }),
+
+  bridge: (step, { state, scores, wording }) => {
+    const options = bridgeCodes(scores).map((c) => ({
+      id: c,
+      label: wording?.labels?.[c] || SHARED[c],
+      codes: [c],
+      tags: { bridge: c },
+    }));
     return {
-      title: b.title,
-      sub: '直感で、近いほうを1つ',
+      title: wording?.title || `${mark(likeOf(state))}で満たされるものと、${mark(dislikeOf(state))}で損なわれるもの。2つに共通しているのは？`,
+      sub: 'いちばん近いものを1つ',
+      context: bridgeContext(state),
       max: 1,
       weight: 1.5,
-      options: [...seededShuffle(opts, `${step.id}:${pair.id}`), none('どちらとも言えない', { ambiguous: pair.codes })],
+      options: [...seededShuffle(options, `${step.id}:${options.map((o) => o.id).join()}`), none('つながっていない気がする')],
     };
   },
 
-  regulation: (step, { state }) => {
-    const L = regulationItem(state);
-    return {
-      title: `${mark(L)}を続けているのは、なぜ？`,
-      sub: '近いものを2つまで',
-      max: 2,
-      weight: 0,
-      options: [...seededShuffle(REG_OPTIONS, `${step.id}:${L}`), none('正直、よくわからない', { regulation: 'UNK' })],
-    };
-  },
+  finalBoundary: (step, { state }) => boundaryQuestion(step, state, 'any'),
 
   persona: (step, { state, scores }) => {
-    const { D, L } = anchorItems(state);
+    const D = dislikeOf(state);
+    const L = likeOf(state);
     const t = topTarget(scores.targets);
     return {
       title: '誰のためのミッションにしたい？',
@@ -489,24 +738,6 @@ const BUILDERS = {
     ],
   }),
 
-  // 根拠の自由記述が少ない上位の動機を狙って問う
-  // AI版では、1回目の自由記述を読んだAIが、本人の言葉を受けて深掘りする問いを書いている（FT1 の followUp）
-  ftWhy: (step, { state, scores }) => {
-    const ft1 = state.answers.FT1;
-    const followUp = ft1 && !ft1.skipped && ft1.analyzedText === ft1.text ? ft1.followUp : '';
-    const top2 = scores.ranking.slice(0, 2);
-    const freeCount = (c) => scores.evidence[c].filter((e) => e.kind === 'free').length;
-    const target = freeCount(top2[1]) < freeCount(top2[0]) ? top2[1] : top2[0];
-    return {
-      title: followUp || (hasSignal(scores)
-        ? WHY_PROMPTS[target]
-        : 'あなたが「好き」「嫌い」と感じるものの奥には、どんな気持ちがあると思いますか？'),
-      sub: 'きっかけになった出来事や、思い浮かぶ人がいれば、それも。',
-      placeholder: '例：小さいころ、〇〇なことがあって…',
-      skippable: true,
-    };
-  },
-
   primary: (step, { scores }) => {
     const top = scores.ranking.slice(0, 4);
     const opts = top.map((c) => ({ id: c, label: CODE_INFO[c].name, desc: evidenceHint(scores.evidence[c]), tags: { primary: c } }));
@@ -525,8 +756,8 @@ const BUILDERS = {
     return {
       title: 'ミッションの候補です。いちばんしっくりくるのは？',
       sub: fromAi
-        ? 'あなたの好き・嫌いと、書いてくれた言葉からつくった下書きです。言い回しは、このあと直せます'
-        : '好き・嫌いへの答えからつくった下書きです。言い回しは、このあと直せます',
+        ? 'あなたの答えと、書いてくれた言葉からつくった下書きです。言い回しは、このあと直せます'
+        : 'ここまでの答えからつくった下書きです。言い回しは、このあと直せます',
       max: 1,
       weight: 0,
       options: [
@@ -599,7 +830,7 @@ function analyzeFreeTextSync(text) {
     const sentence = sentences.find((s) => KEYWORDS[code].some((k) => s.includes(k)));
     if (sentence) hits.push({ code, quote: truncate(sentence, 60) });
   });
-  return { hits, inferences: [], safety: safetyCheck(text), source: 'template', weight: 1, followUp: '' };
+  return { hits, inferences: [], safety: safetyCheck(text), source: 'template', weight: 1 };
 }
 
 // --- 結果画面の文章 ------------------------------------------------------------
@@ -651,7 +882,7 @@ function resultCopySync({ state, scores, aiCandidates }) {
   const r = scores.regulations;
   const autonomous = r.INT || r.ID;
   const pressured = r.INJ || r.EXT;
-  const regItem = quote(regulationItem(state));
+  const regItem = quote(likeOf(state));
   let regulationNote;
   if (pressured) {
     regulationNote = `${regItem}を続ける理由には、${autonomous ? '楽しさや納得に加えて、' : ''}「やらなきゃ」「期待されているから」という気持ちも混ざっているようです。それ自体は悪いことではありません。ただ、楽しさや納得から来る行動のほうが長く続きやすいと言われています。ミッションのどこに「自分で選んだ」感覚があるか、確かめてみてください。`;
@@ -661,6 +892,9 @@ function resultCopySync({ state, scores, aiCandidates }) {
     regulationNote = `${regItem}を続けている理由は、まだはっきりしません。動きながら確かめていけば大丈夫です。`;
   }
 
+  const chains = chainsOf(state);
+  const { bridge } = chains;
+
   const unknowns = [];
   if (scores.unknown > 0) unknowns.push(`「どれも違う／わからない」を選んだ質問が${scores.unknown}問ありました。そのテーマは、まだ言葉になっていないのかもしれません。`);
   if (scores.ambiguous.length > 2) {
@@ -668,27 +902,25 @@ function resultCopySync({ state, scores, aiCandidates }) {
   } else {
     scores.ambiguous.forEach(([a, b]) => unknowns.push(`「${CODE_INFO[a].name}」と「${CODE_INFO[b].name}」のどちらが強いかは、まだ見分けられていません。`));
   }
+  if (!bridge) unknowns.push('好きと嫌いをつなぐものは、まだはっきりしません。');
   if (!chosenPrimary) unknowns.push('いちばん根っこの気持ちは、まだ選ばれていません。いまはスコアの順に並べています。');
   if (!pickedTag(state, 'D1', 'persona')) unknowns.push('誰のためのミッションかは、まだ決まっていません。');
   if (!direction) unknowns.push('ミッションの方向性は、まだ決まっていません。');
   if (['FT1', 'FT2'].some((id) => state.answers[id]?.skipped)) unknowns.push('スキップした自由記述があります。あなた自身の言葉による根拠が少なめです。');
   if (!unknowns.length) unknowns.push('大きな未確定はありません。ただし、これは今日のあなたの答えです。時間をおいて、またやってみてください。');
 
-  // 6項目に共通していた気持ち：いちばん多くの項目に出ていたもの（同数なら根っこ→スコアの順）
-  const { items, thread } = threadOf(state, order);
-
   // ミッションは2つまで。1つ目は本人が書いた文。
-  // 2つ目は「6つに共通していた気持ち」の候補を下書きにする（1つ目と同じなら、次に強い気持ちから）。結果画面で書き換えられる。
+  // 2つ目は「好きと嫌いをつなぐ気持ち」の候補を下書きにする（1つ目と同じなら、次に強い気持ちから）。結果画面で書き換えられる。
   const e2 = state.answers.E2?.chosen?.[0];
   const firstCode = (e2 && !e2.none && e2.meta?.code) || primary;
-  const fromThread = Boolean(thread) && thread.code !== firstCode;
-  const secondCode = fromThread ? thread.code : order.find((c) => c !== firstCode);
+  const fromBridge = Boolean(bridge) && bridge.code !== firstCode;
+  const secondCode = fromBridge ? bridge.code : order.find((c) => c !== firstCode);
   const firstText = (state.answers.FT3?.text || '').trim();
   const missions = [{ code: firstCode, text: firstText || 'ミッションはまだ書かれていません' }];
   if ((hasSignal(scores) || chosenPrimary) && scores.normalized[secondCode] > 0) {
     const base = (aiCandidates?.find((c) => c.code === secondCode) || templateCandidate(state, secondCode)).text;
     const edit = state.mission2Edit?.base === base && state.mission2Edit.text.trim() ? state.mission2Edit.text.trim() : '';
-    missions.push({ code: secondCode, text: edit || base, base, editable: true, edited: Boolean(edit), fromThread });
+    missions.push({ code: secondCode, text: edit || base, base, editable: true, edited: Boolean(edit), fromBridge });
   }
   // 「動機の組み合わせ」は、2つのミッションのもとになった気持ちにそろえる
   const blendCodes = missions.length > 1 ? missions.map((m) => m.code) : order.slice(0, 2);
@@ -696,8 +928,8 @@ function resultCopySync({ state, scores, aiCandidates }) {
   return {
     order,
     missions,
-    items,
-    thread,
+    chains,
+    bridge,
     primaryChosen: Boolean(chosenPrimary),
     blendCodes,
     blend: hasSignal(scores) || chosenPrimary ? blendCodes.map((c) => CODE_INFO[c].verb).join(' × ') : 'まだ見えていません',

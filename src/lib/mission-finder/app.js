@@ -14,12 +14,9 @@ import { COMMUNITY_URL, visitorId } from '../community';
 
 const MISSION_URL = COMMUNITY_URL.replace(/neulog-community$/, 'neulog-mission');
 
-const SAMPLE = {
-  likes: ['ギター', '料理', '散歩'],
-  dislikes: ['満員電車', '理不尽な上下関係', '食べ物を捨てること'],
-};
-const LIKE_PH = ['例：ギター', '例：料理', '例：散歩'];
-const DISLIKE_PH = ['例：満員電車', '例：理不尽な上下関係', '例：食べ物を捨てること'];
+const SAMPLE = { likes: ['友だちとやるボードゲーム'], dislikes: ['がんばりが報われない職場'] };
+const LIKE_PH = ['例：友だちとやるボードゲーム'];
+const DISLIKE_PH = ['例：がんばりが報われない職場'];
 const Q_STEPS = STEPS.filter((s) => s.kind === 'choice' || s.kind === 'free');
 const AUTO_ADVANCE_MS = 320;
 const LOADING_DELAY_MS = 250;
@@ -77,7 +74,7 @@ export async function mountMissionFinder(root) {
   let noticeShown = false;
 
   function freshState() {
-    return { v: 1, stepIndex: 0, likes: ['', '', ''], dislikes: ['', '', ''], answers: {} };
+    return { v: 2, stepIndex: 0, likes: [''], dislikes: [''], answers: {} };
   }
 
   function restore() {
@@ -134,11 +131,13 @@ export async function mountMissionFinder(root) {
       return;
     }
 
-    const isSlot = step.phase === 'A' || step.phase === 'B';
-    const isMission = step.id === 'E2' || step.id === 'E3';
     let loading = '準備しています…';
-    if (aiOn && isSlot) loading = 'あなたの言葉に合わせて、選択肢を書いています…';
-    if (aiOn && isMission) loading = 'あなたの好き・嫌いと言葉から、ミッションの候補を書いています…';
+    if (aiOn) {
+      if (step.gen === 'probe') loading = 'あなたの答えに合わせて、次の問いを考えています…';
+      else if (step.phase === 'A' || step.phase === 'B') loading = 'あなたの言葉に合わせて、選択肢を書いています…';
+      else if (step.gen === 'bridge') loading = '好きと嫌いの答えを見比べています…';
+      else if (step.id === 'E2' || step.id === 'E3') loading = 'あなたの答えと言葉から、ミッションの候補を書いています…';
+    }
     const timer = showLoadingLater(loading);
     const q = await generator.question(step, ctx);
     clearTimeout(timer);
@@ -199,14 +198,14 @@ export async function mountMissionFinder(root) {
     screen.innerHTML = `
       <div class="mf-intro">
         <p class="mf-title">「好き」と「嫌い」から、あなたのミッションを見つける</p>
-        <p class="mf-lead">好きなこと3つと嫌いなこと3つを書いて、質問に答えていくと、あなたを動かしている気持ちと、ミッションの下書きが見えてきます。</p>
+        <p class="mf-lead">好きなこと1つと嫌いなこと1つを書いて、質問に答えながら「なぜ？」を何段か掘っていくと、あなたを動かしている気持ちと、ミッションの下書きが見えてきます。</p>
         <ol class="mf-steps">
-          <li><b>01</b><strong>書く</strong><span>好きなこと3つ、嫌いなこと3つ</span></li>
-          <li><b>02</b><strong>選ぶ</strong><span>25の質問に、選択肢で答える</span></li>
+          <li><b>01</b><strong>書く</strong><span>好きなこと1つ、嫌いなこと1つ</span></li>
+          <li><b>02</b><strong>掘る</strong><span>25の質問に、選択肢で答える（答えに合わせて、次の問いが変わります）</span></li>
           <li><b>03</b><strong>書く</strong><span>途中で3回、自分の言葉で書く</span></li>
           <li><b>04</b><strong>受け取る</strong><span>ミッションの下書きと、その根拠</span></li>
         </ol>
-        <p class="mf-note">所要時間は10〜15分です。答えはこの端末の中にだけ保存されます。自由記述はAIが読み取ることがあります。</p>
+        <p class="mf-note">所要時間は10〜15分です。答えはこの端末の中にだけ保存されます。AIつきのときは、問いや結果の文章をつくるために、答えをAI（Anthropic の Claude）に送ります。</p>
         <div class="mf-intro__actions">
           <button type="button" class="mf-btn mf-btn--primary mf-btn--wide" data-act="next">はじめる</button>
           ${hasAnswers ? '<button type="button" class="mf-btn mf-btn--text" data-act="restart">回答を消して最初から</button>' : ''}
@@ -219,23 +218,23 @@ export async function mountMissionFinder(root) {
   function renderInput() {
     const fields = (kind, placeholders, label) => state[kind].map((v, i) => `
       <label class="mf-field">
-        <span class="mf-field__no" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
+        ${state[kind].length > 1 ? `<span class="mf-field__no" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>` : ''}
         <input type="text" data-kind="${kind}" data-index="${i}" value="${esc(v)}" maxlength="30"
           placeholder="${esc(placeholders[i])}" aria-label="${label}${i + 1}" autocomplete="off">
       </label>`).join('');
     screen.innerHTML = `
       <div class="mf-q">
-        <p class="mf-title">好きなことと嫌いなことを、3つずつ</p>
-        <p class="mf-sub">もの・行動・場面、なんでもかまいません。思いついた順で大丈夫です。</p>
+        <p class="mf-title">好きなことと嫌いなことを、1つずつ</p>
+        <p class="mf-sub">1つずつだけ書いて、そのぶん深く掘っていきます。軽いものより、気持ちが強く動くものを選ぶのがコツです。</p>
         <fieldset class="mf-fields">
-          <legend>好きなこと</legend>
+          <legend>好きなこと（いちばん熱く語れるもの）</legend>
           ${fields('likes', LIKE_PH, '好きなこと')}
         </fieldset>
         <fieldset class="mf-fields">
-          <legend>嫌いなこと・困っていること</legend>
+          <legend>嫌いなこと（いちばん許せない・モヤモヤするもの）</legend>
           ${fields('dislikes', DISLIKE_PH, '嫌いなこと')}
         </fieldset>
-        <p class="mf-note">嫌いなことに特定の人が浮かんだら、その人の「ふるまい」や「状況」として書いてみてください。</p>
+        <p class="mf-note">もの・行動・場面、なんでもかまいません。嫌いなことに特定の人が浮かんだら、その人の「ふるまい」や「状況」として書いてみてください。</p>
         ${import.meta.env.DEV ? '<button type="button" class="mf-btn mf-btn--text" data-act="sample">サンプルを入れる（開発中のみ）</button>' : ''}
       </div>
       ${navHtml(inputReady(), '質問へ進む')}`;

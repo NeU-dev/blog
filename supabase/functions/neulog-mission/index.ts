@@ -1,4 +1,4 @@
-// ミッション・ファインダーのAI部分（選択肢の言い換え・自由記述の分析・ミッション候補・結果の読み解き）。
+// ミッション・ファインダーのAI部分（選択肢の言い換え・掘る問いの組み立て・自由記述の分析・ミッション候補・結果の読み解き）。
 // APIキーはここ（Supabase の secret）にだけ置き、ブラウザには出さない。
 // 誰でも使えるが、1人あたりとサイト全体の1日の回数に上限をかける。上限を超えたら 429 を返し、
 // 画面側はテンプレートの選択肢で続ける。
@@ -14,18 +14,20 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@1.3.0";
 import {
-  ANALYZE_SCHEMA, ANALYZE_SYSTEM, analyzeUserMessage, MISSIONS_SCHEMA, MISSIONS_SYSTEM, missionsUserMessage,
-  OPTIONS_SCHEMA, OPTIONS_SYSTEM, optionsUserMessage, REFLECT_SCHEMA, REFLECT_SYSTEM, reflectUserMessage,
+  ANALYZE_SCHEMA, ANALYZE_SYSTEM, analyzeUserMessage, ASK_SCHEMA, ASK_SYSTEM, askUserMessage, MISSIONS_SCHEMA, MISSIONS_SYSTEM,
+  missionsUserMessage, OPTIONS_SCHEMA, OPTIONS_SYSTEM, optionsUserMessage, PLAN_SCHEMA, PLAN_SYSTEM, planUserMessage, REFLECT_SCHEMA,
+  REFLECT_SYSTEM, reflectUserMessage,
 } from "./prompts.ts";
 import {
-  pickAnalysis, pickLabels, pickMissions, pickReflection, readAnalyzeRequest, readMissionsRequest, readOptionsRequest, readReflectRequest,
+  pickAnalysis, pickAsk, pickLabels, pickMissions, pickPlan, pickReflection, readAnalyzeRequest, readAskRequest, readMissionsRequest,
+  readOptionsRequest, readPlanRequest, readReflectRequest,
 } from "./validate.ts";
 
 // 短い文章の言い換え・読み取り・下書きなので、速くて安い Haiku で十分。
 const MODEL = Deno.env.get("MISSION_MODEL") || "claude-haiku-5-5";
 // 安全分類で断られたときに別モデルで自動でやり直す機能。使えるモデルのときだけ有効にする（Haiku には無い）。
 const USE_FALLBACK = /^claude-(opus-5|sonnet-5-5|fable-5)/.test(MODEL);
-// 1回通すと、選択肢6回＋自由記述2回＋ミッション候補1回＋結果1回で、およそ10回
+// 1回通すと、選択肢2回＋掘る問いの計画2回＋その場の問い3回＋自由記述2回＋ミッション候補1回＋結果1回で、およそ11回
 const VISITOR_DAILY_LIMIT = Number(Deno.env.get("MISSION_VISITOR_DAILY_LIMIT") || 30);
 const SITE_DAILY_LIMIT = Number(Deno.env.get("MISSION_DAILY_LIMIT") || 800);
 const API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
@@ -127,7 +129,24 @@ Deno.serve(async (req) => {
       if (!request) return json({ error: "invalid_request" }, 400);
       if (!await withinDailyLimits(req)) return json({ error: "daily_limit" }, 429);
       const output = await askClaude(ANALYZE_SYSTEM, analyzeUserMessage(request), ANALYZE_SCHEMA, "medium");
-      return json(pickAnalysis(request.text, output, request.followUp));
+      return json(pickAnalysis(request.text, output));
+    }
+
+    if (action === "plan") {
+      const request = readPlanRequest(body);
+      if (!request) return json({ error: "invalid_request" }, 400);
+      if (!await withinDailyLimits(req)) return json({ error: "daily_limit" }, 429);
+      // 答えを待たせないよう軽めに考えさせる（型の選び方は決まりで縛り、崩れた分は画面側で直す）
+      const output = await askClaude(PLAN_SYSTEM, planUserMessage(request), PLAN_SCHEMA, "low");
+      return json(pickPlan(request, output));
+    }
+
+    if (action === "ask") {
+      const request = readAskRequest(body);
+      if (!request) return json({ error: "invalid_request" }, 400);
+      if (!await withinDailyLimits(req)) return json({ error: "daily_limit" }, 429);
+      const output = await askClaude(ASK_SYSTEM, askUserMessage(request), ASK_SCHEMA, "low");
+      return json(pickAsk(request, output));
     }
 
     if (action === "missions") {

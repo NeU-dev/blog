@@ -1,39 +1,49 @@
-// 質問の骨組み。順番・問数・何を測るかはここで固定し、生成器（テンプレ版／AI版）は中身の文言だけをつくる。
-// 選択25問＋自由記述3回。
+// 質問の骨組み。順番・問数・何を測るかはここで固定し、生成器（テンプレ版／AI版）は中身の文言をつくる。
+// 好きなこと1つ・嫌いなこと1つを深く掘る。選択25問＋自由記述3回。
+//
+// 「掘る」の問い（gen: 'probe'）は、型（なぜ・失ったら・例外…）を AI が選ぶ枠。
+// 型ごとに測る気持ちの枠（スロット）は決まっているので、どの型が選ばれても集計は同じやり方でできる。
+// AI が使えないときは、決まった順番の型を使う（generator/template.js の DEFAULT_ORDER）。
 
 export const PHASES = {
-  A: { label: '好きの深掘り', intro: 'まずは「好き」から。どこに惹かれているのかを見ていきます。' },
-  B: { label: '嫌いの深掘り', intro: '次は「嫌い」。何がイヤなのか、代わりにどうなってほしいのかを見ていきます。' },
-  C: { label: '見極め', intro: 'ここからは、似ている気持ちを見分ける質問です。深く考えずに、直感で選んでください。' },
+  A: { label: '好きを掘る', intro: 'まずは「好き」から。どこに惹かれていて、本当は何を大事にしているのかを、何段か掘っていきます。' },
+  B: { label: '嫌いを掘る', intro: '次は「嫌い」。何がイヤで、何が損なわれていると感じるのかを掘っていきます。' },
+  C: { label: 'つなぐ', intro: 'ここからは、好きと嫌いの答えを見比べます。' },
   D: { label: '相手・方向性・関わり方', intro: '誰のために、どんな方向で、どう関わりたいかを選びます。' },
   E: { label: 'ミッション選び', intro: 'ここまでの答えから、ミッションの下書きをつくります。' },
   W: { label: '自由記述' },
 };
+
+// 掘る問いの数（好き5・嫌い6）
+export const PROBE_COUNT = { like: 5, dislike: 6 };
 
 const steps = [
   { id: 'intro', kind: 'intro' },
   { id: 'input', kind: 'input' },
 ];
 
-// A：好き1つにつき「惹かれる点」「満たされる瞬間」の2問（同じ項目を続けて聞く）
-[0, 1, 2].forEach((i) => {
-  steps.push({ id: `A${i * 2 + 1}`, kind: 'choice', phase: 'A', gen: 'likeAttraction', item: i });
-  steps.push({ id: `A${i * 2 + 2}`, kind: 'choice', phase: 'A', gen: 'likeMoment', item: i });
-});
+// A：好き。「惹かれる点」「満たされる瞬間」は全員に聞き、そのあと5問を掘る。最後に、続けている理由
+steps.push(
+  { id: 'A1', kind: 'choice', phase: 'A', gen: 'likeAttraction', item: 0 },
+  { id: 'A2', kind: 'choice', phase: 'A', gen: 'likeMoment', item: 0 },
+);
+for (let i = 0; i < PROBE_COUNT.like; i++) steps.push({ id: `A${i + 3}`, kind: 'choice', phase: 'A', gen: 'probe', side: 'like', index: i });
+steps.push({ id: 'A8', kind: 'choice', phase: 'A', gen: 'regulation' });
+steps.push({ id: 'FT1', kind: 'free', phase: 'W', gen: 'ftLike', n: 1 });
 
-// B：嫌い1つにつき「何がイヤか」「代わりにどうなってほしいか」の2問
-[0, 1, 2].forEach((i) => {
-  steps.push({ id: `B${i * 2 + 1}`, kind: 'choice', phase: 'B', gen: 'dislikeWhat', item: i });
-  steps.push({ id: `B${i * 2 + 2}`, kind: 'choice', phase: 'B', gen: 'dislikeInverse', item: i });
-});
+// B：嫌い。「何がイヤか」「代わりにどうなってほしいか」は全員に聞き、そのあと6問を掘る
+steps.push(
+  { id: 'B1', kind: 'choice', phase: 'B', gen: 'dislikeWhat', item: 0 },
+  { id: 'B2', kind: 'choice', phase: 'B', gen: 'dislikeInverse', item: 0 },
+);
+for (let i = 0; i < PROBE_COUNT.dislike; i++) steps.push({ id: `B${i + 3}`, kind: 'choice', phase: 'B', gen: 'probe', side: 'dislike', index: i });
+steps.push({ id: 'FT2', kind: 'free', phase: 'W', gen: 'ftDislike', n: 2 });
 
-steps.push({ id: 'FT1', kind: 'free', phase: 'W', gen: 'ftEpisode', n: 1 });
-
-// C：紛らわしい動機のペアを見分ける5問＋動かされ方（R）1問
-[0, 1, 2, 3, 4].forEach((i) => {
-  steps.push({ id: `C${i + 1}`, kind: 'choice', phase: 'C', gen: 'boundary', index: i });
-});
-steps.push({ id: 'C6', kind: 'choice', phase: 'C', gen: 'regulation' });
+// C：好きと嫌いをつなぐ問いと、最後の見極め（点数が近い2つの気持ちを見分ける）
+steps.push(
+  { id: 'C1', kind: 'choice', phase: 'C', gen: 'bridge' },
+  { id: 'C2', kind: 'choice', phase: 'C', gen: 'finalBoundary' },
+);
 
 steps.push(
   { id: 'D1', kind: 'choice', phase: 'D', gen: 'persona' },
@@ -41,8 +51,6 @@ steps.push(
   { id: 'D3', kind: 'choice', phase: 'D', gen: 'roles' },
   { id: 'D4', kind: 'choice', phase: 'D', gen: 'distance' },
 );
-
-steps.push({ id: 'FT2', kind: 'free', phase: 'W', gen: 'ftWhy', n: 2 });
 
 steps.push(
   { id: 'E1', kind: 'choice', phase: 'E', gen: 'primary' },

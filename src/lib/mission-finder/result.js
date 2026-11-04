@@ -6,27 +6,21 @@ import { esc, html, plain, truncate } from './text.js';
 
 const chosen = (state, id) => (state.answers[id]?.chosen || []).filter((o) => !o.none);
 const codeVar = (c) => `var(--mf-${c.toLowerCase()})`;
-const KIND_LABEL = { like: '好き', dislike: '嫌い' };
 
 export function missionOf(state) {
   return (state.answers.FT3?.text || '').trim();
 }
 
-function aboutLabel(state, about) {
-  if (!about || about === 'other') return '';
-  const list = about[0] === 'l' ? state.likes : state.dislikes;
-  return list[Number(about.slice(1))] || '';
-}
-
-// 原体験・動機・ミッション・手段の4段（画面とPDFで共通の中身）
+// 原体験・動機・ミッション・手段の4段（画面とPDFで共通の中身）。原体験は、好き・嫌いそれぞれの場面
 function chainParts(state, copy) {
-  const ft1 = state.answers.FT1;
-  const about = aboutLabel(state, ft1?.about);
+  const episode = (id, item) => {
+    const a = state.answers[id];
+    return a && !a.skipped && a.text?.trim() ? { item, text: truncate(a.text, 80) } : null;
+  };
   const roles = chosen(state, 'D3').map((o) => ROLES[o.role]);
   const dist = chosen(state, 'D4')[0];
   return {
-    about,
-    episode: ft1?.text?.trim() ? truncate(ft1.text, 90) : '',
+    episodes: [episode('FT1', state.likes[0]), episode('FT2', state.dislikes[0])].filter(Boolean),
     motives: copy.blendCodes.map((c) => CODE_INFO[c].name).join('、'),
     means: roles.length ? `${roles.join('・')}${dist ? `（${DISTANCES[dist.distance]}）` : ''}` : 'まだ決めていません',
   };
@@ -45,19 +39,12 @@ function readingHtml(copy) {
     </section>`;
 }
 
-function threadSentence(copy) {
-  return copy.thread
-    ? `6つのうち${copy.thread.count}つに「${CODE_INFO[copy.thread.code].name}」が出ていました。`
-    : '6つに共通する気持ちは、まだはっきりしません。';
-}
-
-// ミッションに使った気持ちは強調して見せる
-function keyCodes(copy) {
-  return new Set(copy.missions.map((m) => m.code));
+function bridgeSentence(copy) {
+  return copy.bridge ? `「${copy.bridge.label}」` : 'まだはっきりしません';
 }
 
 function missionSource(m) {
-  return m.fromThread ? `6つに共通していた「${CODE_INFO[m.code].name}」から` : `「${CODE_INFO[m.code].name}」から`;
+  return m.fromBridge ? `好きと嫌いをつなぐ「${CODE_INFO[m.code].name}」から` : `「${CODE_INFO[m.code].name}」から`;
 }
 
 function evidenceItem(e) {
@@ -96,23 +83,25 @@ function missionsHtml(copy) {
     </div>`).join('');
 }
 
-function itemsHtml(copy) {
-  const keys = keyCodes(copy);
-  return copy.items.map((item) => `
-    <li>
-      <span class="mf-items__kind">${KIND_LABEL[item.kind]}</span>
-      <span class="mf-items__name">${esc(item.label)}</span>
-      <span class="mf-items__codes">${item.codes.length
-        ? item.codes.map((c) => `<span class="mf-code${keys.has(c) ? ' is-key' : ''}" style="--c: ${codeVar(c)}">${esc(CODE_INFO[c].name)}</span>`).join('')
-        : '<span class="mf-items__none">まだ言葉になっていない</span>'}</span>
+// 好き・嫌いそれぞれを掘った流れ（上から下へ、一段ずつ深くなる）
+function ladderHtml(chain, kind) {
+  const links = chain.links.map((l) => `
+    <li${l.values.length ? '' : ' class="is-empty"'}>
+      <span class="mf-ladder__label">${esc(l.label)}</span>
+      <p>${l.values.length ? esc(l.values.join('、')) : 'この段は聞いていません'}</p>
     </li>`).join('');
+  return `
+    <div class="mf-ladder">
+      <p class="mf-ladder__head"><small>${kind}</small><span>${html(`⟦${chain.item}⟧`)}</span></p>
+      <ol>${links}</ol>
+    </div>`;
 }
 
 export function resultHtml({ state, scores }, copy, { debug = false } = {}) {
   const chain = chainParts(state, copy);
-  const episode = chain.episode
-    ? `${chain.about ? `${html(`⟦${chain.about}⟧`)}について。` : ''}${esc(chain.episode)}`
-    : 'まだ書かれていません';
+  const episode = chain.episodes.length
+    ? chain.episodes.map((e) => `<p>${html(`⟦${e.item}⟧`)}：${esc(e.text)}</p>`).join('')
+    : '<p>まだ書かれていません</p>';
 
   const max = Math.max(...copy.order.map((c) => scores.normalized[c]), 0.0001);
   const bars = copy.order.map((c, i) => `
@@ -156,16 +145,15 @@ export function resultHtml({ state, scores }, copy, { debug = false } = {}) {
     ${readingHtml(copy)}
 
     <section class="mf-block">
-      <h3 class="mf-h">6つに共通していたこと</h3>
-      <p class="mf-thread">${esc(threadSentence(copy))}</p>
-      <ul class="mf-items">${itemsHtml(copy)}</ul>
-      <p class="mf-note">色が濃い気持ちが、ミッションのもとになっています。</p>
+      <h3 class="mf-h">好きと嫌いを掘ったら</h3>
+      <div class="mf-ladders">${ladderHtml(copy.chains.like, '好き')}${ladderHtml(copy.chains.dislike, '嫌い')}</div>
+      <p class="mf-bridge"><span>2つに共通していること</span><strong>${esc(bridgeSentence(copy))}</strong></p>
     </section>
 
     <section class="mf-block">
       <h3 class="mf-h">原体験から手段まで</h3>
       <ol class="mf-chain">
-        <li><span class="mf-chain__label">原体験</span><p>${episode}</p></li>
+        <li><span class="mf-chain__label">原体験</span>${episode}</li>
         <li><span class="mf-chain__label">動機</span><p>${esc(chain.motives)}</p></li>
         <li><span class="mf-chain__label">ミッション</span>${copy.missions.map((m, i) => `<p${i > 0 ? ' data-ref="chain-mission2"' : ''}>${esc(m.text)}</p>`).join('')}</li>
         <li><span class="mf-chain__label">手段</span><p>${esc(chain.means)}</p></li>
@@ -219,7 +207,6 @@ export function resultHtml({ state, scores }, copy, { debug = false } = {}) {
 
 export function printHtml({ state, scores }, copy, { pageUrl = '', date = '' } = {}) {
   const chain = chainParts(state, copy);
-  const keys = keyCodes(copy);
   const max = Math.max(...copy.order.map((c) => scores.normalized[c]), 0.0001);
 
   const missions = copy.missions.map((m, i) => `
@@ -231,13 +218,11 @@ export function printHtml({ state, scores }, copy, { pageUrl = '', date = '' } =
       </div>
     </li>`).join('');
 
-  const items = copy.items.map((item) => `
-    <tr>
-      <th><span>${KIND_LABEL[item.kind]}</span>${esc(item.label)}</th>
-      <td>${item.codes.length
-        ? item.codes.map((c) => `<span class="mfp-code${keys.has(c) ? ' is-key' : ''}" style="--c: ${codeVar(c)}">${esc(CODE_INFO[c].name)}</span>`).join('')
-        : '<span class="mfp-muted">まだ言葉になっていない</span>'}</td>
-    </tr>`).join('');
+  const ladder = (c, kind) => `
+    <div class="mfp-ladder">
+      <p class="mfp-ladder__head">${kind}「${esc(c.item)}」</p>
+      <dl>${c.links.map((l) => `<dt>${esc(l.label)}</dt><dd>${l.values.length ? esc(l.values.join('、')) : '<span class="mfp-muted">―</span>'}</dd>`).join('')}</dl>
+    </div>`;
 
   const bars = copy.order.map((c) => `
     <div class="mfp-bar">
@@ -259,15 +244,15 @@ export function printHtml({ state, scores }, copy, { pageUrl = '', date = '' } =
     </section>` : ''}
 
     <section class="mfp-sec">
-      <h2>6つに共通していたこと</h2>
-      <p class="mfp-strong">${esc(threadSentence(copy))}</p>
-      <table class="mfp-items"><tbody>${items}</tbody></table>
+      <h2>好きと嫌いを掘ったら</h2>
+      <div class="mfp-ladders">${ladder(copy.chains.like, '好き')}${ladder(copy.chains.dislike, '嫌い')}</div>
+      <p class="mfp-strong">2つに共通していること：${esc(bridgeSentence(copy))}</p>
     </section>
 
     <section class="mfp-sec">
       <h2>原体験から手段まで</h2>
       <dl class="mfp-chain">
-        <dt>原体験</dt><dd>${chain.episode ? `${chain.about ? `「${esc(chain.about)}」について。` : ''}${esc(chain.episode)}` : 'まだ書かれていません'}</dd>
+        <dt>原体験</dt><dd>${chain.episodes.length ? chain.episodes.map((e) => `「${esc(e.item)}」：${esc(e.text)}`).join('<br>') : 'まだ書かれていません'}</dd>
         <dt>動機</dt><dd>${esc(chain.motives)}</dd>
         <dt>ミッション</dt><dd>${copy.missions.map((m) => esc(m.text)).join('<br>')}</dd>
         <dt>手段</dt><dd>${esc(chain.means)}</dd>
@@ -313,7 +298,7 @@ export function resultText(ctx, copy, pageUrl) {
     '',
     `動機の組み合わせ：${copy.blend}`,
     ...(copy.direction ? [`方向性：${copy.direction.name}`] : []),
-    `6つに共通していたこと：${threadSentence(copy)}`,
+    `好きと嫌いに共通していること：${bridgeSentence(copy)}`,
     ...(copy.reading ? ['', copy.reading] : []),
     '',
     'ここから作れそうなもの',

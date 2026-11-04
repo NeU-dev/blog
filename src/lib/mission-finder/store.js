@@ -5,7 +5,8 @@ const KEY = 'neulog-mission-finder:v1';
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    return s && s.v === 1 ? s : null;
+    // v2 から好き・嫌いは1つずつ。3つずつだった頃（v1）の回答は読み込まない
+    return s && s.v === 2 ? s : null;
   } catch {
     return null;
   }

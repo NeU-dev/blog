@@ -10,9 +10,9 @@ export const MAX_LABEL = 28;
 export type Slot = { slot: string; template: string };
 export type OptionsQuestion = { id: string; type: string; question: string; slots: Slot[] };
 export type OptionsRequest = { item: string; kind: "like" | "dislike"; questions: OptionsQuestion[] };
-export type AnalyzeRequest = { question: string; text: string; likes: string[]; dislikes: string[]; followUp: boolean };
+export type AnalyzeRequest = { question: string; text: string; likes: string[]; dislikes: string[] };
 export type CodeHit = { code: string; quote: string; basis: "testimony" | "inference" };
-export type Analysis = { codes: CodeHit[]; safety: "none" | "concern"; followUp: string };
+export type Analysis = { codes: CodeHit[]; safety: "none" | "concern" };
 
 // ミッション候補と結果の読み解きに渡す、本人の材料
 export type ItemAnswers = { item: string; kind: "like" | "dislike"; picks: string[] };
@@ -46,6 +46,34 @@ function text(value: unknown, max: number): string | null {
   return trimmed && length(trimmed) <= max ? trimmed : null;
 }
 
+function readSlots(value: unknown, min: number, max: number): Slot[] | null {
+  if (!Array.isArray(value) || value.length < min || value.length > max) return null;
+  const slots: Slot[] = [];
+  for (const raw of value) {
+    if (!isObj(raw)) return null;
+    const slot = typeof raw.slot === "string" && SLOT_IDS.includes(raw.slot) ? raw.slot : null;
+    const template = text(raw.template, 40);
+    if (!slot || !template || slots.some((s) => s.slot === slot)) return null;
+    slots.push({ slot, template });
+  }
+  return slots;
+}
+
+// スロットごとに1つ。長すぎ・用語入り・ほかのスロットと同じ文は捨てる（足りない分は画面側でテンプレ文言を使う）
+function pickSlotLabels(slots: Slot[], options: unknown): Record<string, string> {
+  const list = Array.isArray(options) ? options.filter(isObj) : [];
+  const labels: Record<string, string> = {};
+  const used = new Set<string>();
+  for (const s of slots) {
+    const label = cleanLabel(list.find((o) => o.slot === s.slot)?.label);
+    if (label && !used.has(label)) {
+      labels[s.slot] = label;
+      used.add(label);
+    }
+  }
+  return labels;
+}
+
 export function readOptionsRequest(body: unknown): OptionsRequest | null {
   if (!isObj(body)) return null;
   const item = text(body.item, 30);
@@ -58,15 +86,9 @@ export function readOptionsRequest(body: unknown): OptionsRequest | null {
     const id = typeof raw.id === "string" && /^[AB][1-6]$/.test(raw.id) ? raw.id : null;
     const type = typeof raw.type === "string" && QUESTION_TYPES.includes(raw.type) ? raw.type : null;
     const question = text(raw.question, 120);
-    if (!id || !type || !question || !Array.isArray(raw.slots) || raw.slots.length < 1 || raw.slots.length > SLOT_IDS.length) return null;
-    const slots: Slot[] = [];
-    for (const rawSlot of raw.slots) {
-      if (!isObj(rawSlot)) return null;
-      const slot = typeof rawSlot.slot === "string" && SLOT_IDS.includes(rawSlot.slot) ? rawSlot.slot : null;
-      const template = text(rawSlot.template, 40);
-      if (!slot || !template || slots.some((s) => s.slot === slot)) return null;
-      slots.push({ slot, template });
-    }
+    if (!id || !type || !question) return null;
+    const slots = readSlots(raw.slots, 1, SLOT_IDS.length);
+    if (!slots) return null;
     questions.push({ id, type, question, slots });
   }
   return { item, kind, questions };
@@ -85,18 +107,7 @@ export function pickLabels(request: OptionsRequest, output: unknown): Record<str
   const list = isObj(output) && Array.isArray(output.questions) ? output.questions.filter(isObj) : [];
   const result: Record<string, Record<string, string>> = {};
   for (const q of request.questions) {
-    const found = list.find((x) => x.id === q.id);
-    const options = found && Array.isArray(found.options) ? found.options.filter(isObj) : [];
-    const labels: Record<string, string> = {};
-    const used = new Set<string>();
-    for (const s of q.slots) {
-      const label = cleanLabel(options.find((o) => o.slot === s.slot)?.label);
-      if (label && !used.has(label)) {
-        labels[s.slot] = label;
-        used.add(label);
-      }
-    }
-    result[q.id] = labels;
+    result[q.id] = pickSlotLabels(q.slots, list.find((x) => x.id === q.id)?.options);
   }
   return result;
 }
@@ -110,11 +121,11 @@ export function readAnalyzeRequest(body: unknown): AnalyzeRequest | null {
     .map((v) => text(v, 30))
     .filter((v): v is string => Boolean(v))
     .slice(0, 3);
-  return { question, text: freeText, likes: items(body.likes), dislikes: items(body.dislikes), followUp: body.followUp === true };
+  return { question, text: freeText, likes: items(body.likes), dislikes: items(body.dislikes) };
 }
 
 // 引用が本人の文章に実在するものだけを残す（言い換えや作り話の引用を落とす）
-export function pickAnalysis(sourceText: string, output: unknown, wantFollowUp = false): Analysis {
+export function pickAnalysis(sourceText: string, output: unknown): Analysis {
   const raw = isObj(output) && Array.isArray(output.codes) ? output.codes.filter(isObj) : [];
   const seen = new Set<string>();
   const codes: CodeHit[] = [];
@@ -128,8 +139,7 @@ export function pickAnalysis(sourceText: string, output: unknown, wantFollowUp =
     codes.push({ code, quote, basis });
   }
   const safety = isObj(output) && output.safety === "concern" ? "concern" : "none";
-  const followUp = wantFollowUp && isObj(output) ? cleanSentence(output.followUp, 90, true) || "" : "";
-  return { codes, safety, followUp };
+  return { codes, safety };
 }
 
 // --- ミッション候補・結果の読み解き ---------------------------------------------
@@ -161,7 +171,7 @@ function readMaterial(body: Obj): Material | null {
   const dislikes = strings(body.dislikes, 30, 3);
   if (!likes.length || !dislikes.length) return null;
   const answers = (Array.isArray(body.answers) ? body.answers : []).filter(isObj).slice(0, 6)
-    .map((a): ItemAnswers => ({ item: optional(a.item, 30), kind: a.kind === "dislike" ? "dislike" : "like", picks: strings(a.picks, 40, 4) }))
+    .map((a): ItemAnswers => ({ item: optional(a.item, 30), kind: a.kind === "dislike" ? "dislike" : "like", picks: strings(a.picks, 40, 12) }))
     .filter((a) => a.item);
   const episode = isObj(body.episode) ? body.episode : {};
   const why = isObj(body.why) ? body.why : {};
@@ -241,4 +251,102 @@ export function pickReflection(request: ReflectRequest, output: unknown): Reflec
     firstStep: cleanSentence(o.firstStep, 80) || "",
     question: cleanSentence(o.question, 60, true) || "",
   };
+}
+
+// --- 掘る問いの計画（型の順番と文言）・その場で書く問い ------------------------------------
+
+export const PROBE_TYPES = ["why", "value", "loss", "exception", "spread", "origin", "boundary", "who", "reaction", "power"];
+export type QA = { question: string; answer: string };
+export type MenuItem = { type: string; purpose: string; live: boolean; fixed: boolean; question: string; slots: Slot[] };
+export type PlanRequest = {
+  side: "like" | "dislike";
+  item: string;
+  other: string;
+  answers: QA[];
+  episode: string;
+  focus: string[];
+  count: number;
+  menu: MenuItem[];
+};
+export type PlannedProbe = { type: string; reason: string; title: string; labels: Record<string, string> };
+export type Plan = { probes: PlannedProbe[]; freeQuestion: string };
+export type AskRequest = { kind: "value" | "bridge"; side: string; item: string; other: string; context: QA[]; title: string; slots: Slot[] };
+export type Asked = { title: string; labels: Record<string, string> };
+
+function readQAs(value: unknown, max: number): QA[] {
+  return (Array.isArray(value) ? value : []).filter(isObj).slice(0, max)
+    .map((qa) => ({ question: optional(qa.question, 120), answer: optional(qa.answer, 120) }))
+    .filter((qa) => qa.question && qa.answer);
+}
+
+// 問いは「？」で終わる一文
+function cleanQuestion(value: unknown, max = 70): string | null {
+  const question = cleanSentence(value, max, true);
+  return question && /[？?]$/.test(question) ? question : null;
+}
+
+export function readPlanRequest(body: unknown): PlanRequest | null {
+  if (!isObj(body)) return null;
+  const side = body.side === "like" || body.side === "dislike" ? body.side : null;
+  const item = text(body.item, 30);
+  const count = typeof body.count === "number" && Number.isInteger(body.count) && body.count >= 1 && body.count <= 8 ? body.count : null;
+  if (!side || !item || !count || !Array.isArray(body.menu) || body.menu.length < 1 || body.menu.length > 12) return null;
+  const menu: MenuItem[] = [];
+  for (const raw of body.menu) {
+    if (!isObj(raw)) return null;
+    const type = typeof raw.type === "string" && PROBE_TYPES.includes(raw.type) ? raw.type : null;
+    const purpose = text(raw.purpose, 120);
+    const live = raw.live === true;
+    const fixed = raw.fixed === true;
+    const slots = live || fixed ? [] : readSlots(raw.slots, 2, SLOT_IDS.length);
+    if (!type || !purpose || !slots || menu.some((m) => m.type === type)) return null;
+    menu.push({ type, purpose, live, fixed, question: optional(raw.question, 120), slots });
+  }
+  return {
+    side,
+    item,
+    other: optional(body.other, 30),
+    answers: readQAs(body.answers, 12),
+    episode: optional(body.episode, 600),
+    focus: strings(body.focus, 20, 7),
+    count,
+    menu,
+  };
+}
+
+// メニューにある型だけ。文言は、AIが書いてよい型（live でも fixed でもないもの）だけ残す。
+// 順番の決まり（「なぜ」を入れる、見極めは2回まで など）は画面側でそろえる
+export function pickPlan(request: PlanRequest, output: unknown): Plan {
+  const list = isObj(output) && Array.isArray(output.probes) ? output.probes.filter(isObj) : [];
+  const probes: PlannedProbe[] = [];
+  for (const p of list) {
+    const m = request.menu.find((x) => x.type === p.type);
+    if (!m) continue;
+    const writable = !m.live && !m.fixed;
+    probes.push({
+      type: m.type,
+      reason: cleanSentence(p.reason, 60) || "",
+      title: writable ? cleanQuestion(p.title) || "" : "",
+      labels: writable ? pickSlotLabels(m.slots, p.options) : {},
+    });
+    if (probes.length === request.count) break;
+  }
+  const freeQuestion = isObj(output) ? cleanSentence(output.freeQuestion, 90, true) || "" : "";
+  return { probes, freeQuestion };
+}
+
+export function readAskRequest(body: unknown): AskRequest | null {
+  if (!isObj(body)) return null;
+  const kind = body.kind === "value" || body.kind === "bridge" ? body.kind : null;
+  const item = text(body.item, 30);
+  const title = text(body.title, 120);
+  const context = readQAs(body.context, 12);
+  const slots = readSlots(body.slots, 2, 8);
+  if (!kind || !item || !title || !context.length || !slots) return null;
+  return { kind, side: optional(body.side, 10), item, other: optional(body.other, 30), context, title, slots };
+}
+
+export function pickAsk(request: AskRequest, output: unknown): Asked {
+  const o = isObj(output) ? output : {};
+  return { title: cleanQuestion(o.title) || "", labels: pickSlotLabels(request.slots, o.options) };
 }

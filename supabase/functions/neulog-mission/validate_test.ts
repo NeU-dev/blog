@@ -1,7 +1,7 @@
 // deno test supabase/functions/neulog-mission/validate_test.ts
 import {
-  cleanLabel, cleanMission, pickAnalysis, pickLabels, pickMissions, pickReflection,
-  readAnalyzeRequest, readMissionsRequest, readOptionsRequest, readReflectRequest,
+  cleanLabel, cleanMission, pickAnalysis, pickAsk, pickLabels, pickMissions, pickPlan, pickReflection,
+  readAnalyzeRequest, readAskRequest, readMissionsRequest, readOptionsRequest, readPlanRequest, readReflectRequest,
 } from "./validate.ts";
 
 function assertEquals(actual: unknown, expected: unknown) {
@@ -76,21 +76,13 @@ Deno.test("分析の出力：本文にない引用・重複・不正なコード
       { code: "K6", quote: "みんなで 助け合える職場", basis: "inference" },
     ],
     safety: "none",
-    followUp: "",
   });
-  assertEquals(pickAnalysis(text, { codes: "x", safety: "concern" }), { codes: [], safety: "concern", followUp: "" });
-});
-
-Deno.test("分析の出力：次の問いは頼んだときだけ返す", () => {
-  const output = { codes: [], safety: "none", followUp: "「おかしい」と感じたのは、なぜだと思いますか？" };
-  assertEquals(pickAnalysis("おかしいと思った", output).followUp, "");
-  assertEquals(pickAnalysis("おかしいと思った", output, true).followUp, "「おかしい」と感じたのは、なぜだと思いますか？");
-  assertEquals(pickAnalysis("おかしいと思った", { ...output, followUp: "あなたの動機は？" }, true).followUp, "");
+  assertEquals(pickAnalysis(text, { codes: "x", safety: "concern" }), { codes: [], safety: "concern" });
 });
 
 const material = {
-  likes: ["ブログを書く", "ゲーム", "カフェ巡り"],
-  dislikes: ["Xがやめれない", "満員電車", "長いだけの会議"],
+  likes: ["ゲーム"],
+  dislikes: ["Xがやめれない"],
   answers: [{ item: "ゲーム", kind: "like", picks: ["仲間と同じ画面を囲んで盛り上がれたとき"] }],
   episode: { about: "ゲーム", text: "知らない人と協力してボスを倒したとき、すごく楽しかった。" },
   why: { text: "一人で抱えこんでいた時期があったから。" },
@@ -146,4 +138,52 @@ Deno.test("結果の読み解き：引用は本人の言葉かミッションか
   assertEquals(reflection.quotes, ["知らない人と協力してボスを倒した", "人と人をつなぐ"]);
   assertEquals(reflection.ideas, ["a", "b", "c"]);
   assertEquals(reflection.firstStep, "週末に、ゲーム仲間を1人誘ってみる");
+});
+
+const planBody = {
+  side: "like",
+  item: "ゲーム",
+  other: "Xがやめれない",
+  answers: [{ question: "「ゲーム」の、どこに惹かれる？", answer: "誰かとつながるきっかけになる" }],
+  focus: ["つながっていたい", "味わいたい・知りたい"],
+  count: 3,
+  menu: [
+    { type: "why", purpose: "一段上の理由", live: false, fixed: false, question: "その瞬間、何を手に入れている？", slots: [{ slot: "K6", template: "誰かと一緒にいる安心" }, { slot: "K3e", template: "時間を忘れる没頭" }] },
+    { type: "value", purpose: "なぜうれしいか", live: true, fixed: false, question: "", slots: [] },
+    { type: "boundary", purpose: "見極め", live: false, fixed: true, question: "", slots: [] },
+  ],
+};
+
+Deno.test("計画のリクエスト：知らない型や、文言を書く型にスロットが無いものは断る", () => {
+  assertEquals(readPlanRequest(planBody)?.menu.map((m) => m.type), ["why", "value", "boundary"]);
+  assertEquals(readPlanRequest({ ...planBody, menu: [{ ...planBody.menu[0], type: "hack" }] }), null);
+  assertEquals(readPlanRequest({ ...planBody, menu: [{ ...planBody.menu[0], slots: [] }] }), null);
+  assertEquals(readPlanRequest({ ...planBody, count: 20 }), null);
+});
+
+Deno.test("計画の出力：メニューの型だけ・文言は書いてよい型だけ・問いは「？」で終わるものだけ", () => {
+  const request = readPlanRequest(planBody)!;
+  const plan = pickPlan(request, {
+    probes: [
+      { type: "why", reason: "瞬間の中身を確かめる", title: "一緒に遊べたとき、何を手に入れている？", options: [{ slot: "K6", label: "仲間がいる安心" }, { slot: "K9", label: "x" }] },
+      { type: "hack", reason: "", title: "", options: [] },
+      { type: "value", reason: "価値を聞く", title: "勝手に書いた問い？", options: [{ slot: "K6", label: "x" }] },
+      { type: "boundary", reason: "", title: "問いではない文", options: [] },
+      { type: "why", reason: "", title: "", options: [] },
+    ],
+    freeQuestion: "「ゲーム」で、忘れられない場面はどんなとき？",
+  });
+  assertEquals(plan.probes.map((p) => p.type), ["why", "value", "boundary"]);
+  assertEquals(plan.probes[0], { type: "why", reason: "瞬間の中身を確かめる", title: "一緒に遊べたとき、何を手に入れている？", labels: { K6: "仲間がいる安心" } });
+  assertEquals(plan.probes[1].title, "");
+  assertEquals(plan.freeQuestion, "「ゲーム」で、忘れられない場面はどんなとき？");
+});
+
+Deno.test("その場の問い：材料が無ければ断り、頼んだスロットだけ返す", () => {
+  const body = { kind: "value", item: "ゲーム", context: [{ question: "何を手に入れている？", answer: "誰かと一緒にいる安心" }], title: "なぜうれしい？", slots: [{ slot: "K6", template: "ひとりじゃないと思える" }, { slot: "K5", template: "自分を信じられる" }] };
+  assertEquals(readAskRequest({ ...body, context: [] }), null);
+  const request = readAskRequest(body)!;
+  assertEquals(pickAsk(request, { title: "「一緒にいる安心」が、なぜうれしい？", options: [{ slot: "K6", label: "ひとりじゃないと思えるから" }, { slot: "K1", label: "x" }] }),
+    { title: "「一緒にいる安心」が、なぜうれしい？", labels: { K6: "ひとりじゃないと思えるから" } });
+  assertEquals(pickAsk(request, { title: "問いではない", options: [] }).title, "");
 });

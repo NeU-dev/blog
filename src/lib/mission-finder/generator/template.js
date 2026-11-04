@@ -147,7 +147,7 @@ const BOUNDARY_BANK = [
     const L = mark(likeFor(s, ['K3', 'K4']));
     return {
       title: 'どっちのほうが、つらい？',
-      options: { K4: `${L}そのものが、世の中から消えてしまう`, K3: `自分が${L}をする時間が、なくなってしまう` },
+      options: { K4: `${L}そのものが、世の中から消えてしまう`, K3: `自分が${L}に使える時間が、なくなってしまう` },
     };
   } },
   { id: 'K3K5', priority: true, build: (s) => ({
@@ -216,12 +216,19 @@ function planBoundary(state) {
   return picked;
 }
 
+// 動かされ方（自己決定理論の調整様式）は、気持ちそのものではなく「行動を続けている理由」で聞く。
+// いちばん反応が強かった「好き」について聞き、結果の「動かされ方のメモ」に使う（スコアには入れない）。
 const REG_OPTIONS = [
   { id: 'INT', label: 'やっていて、楽しい・面白いから', tags: { regulation: 'INT' } },
   { id: 'ID', label: '大事なことだと、自分で納得しているから', tags: { regulation: 'ID' } },
-  { id: 'INJ', label: 'やらないと、罪悪感や焦りがあるから', tags: { regulation: 'INJ' } },
-  { id: 'EXT', label: '誰かに期待されている・言われているから', tags: { regulation: 'EXT' } },
+  { id: 'INJ', label: 'やらないと、落ち着かない・焦るから', tags: { regulation: 'INJ' } },
+  { id: 'EXT', label: 'まわりに期待されている・言われているから', tags: { regulation: 'EXT' } },
 ];
+
+function regulationItem(state) {
+  const s = computeScores(state, indexOfStep('C6'));
+  return state.likes[topItem(state, 'like', hasSignal(s) ? s.ranking[0] : null)];
+}
 
 // --- D・E：相手とミッション ---------------------------------------------------
 
@@ -244,62 +251,83 @@ function anchorItems(state) {
   return { D: state.dislikes[topItem(state, 'dislike', top)], L: state.likes[topItem(state, 'like', top)] };
 }
 
-const dislikePersona = (state) => `${anchorItems(state).D}にモヤモヤしている人`;
 const PAST_PERSONA = '昔の自分と同じところでつまずいている人';
-
-// ミッションは、ブログ記事の定義「誰のために、どんな価値を生み出し続けるか」に合わせて
-// 「{誰}が、{どんな状態}…こと」の形にそろえる。手段（何をつくるか）は入れない。
-const STATE_PHRASE = {
-  K1: 'しんどさを一人で抱えこまずにいられる',
-  K2: '理不尽に振り回されず、フェアに扱われる',
-  K3: '夢中になれる時間を、心ゆくまで味わえる',
-  K4: '大切なものを、大切にし続けられる',
-  K5: '自分のやり方で、やりたいことを形にできる',
-  K6: '安心して人とつながれる',
-  K7: '自分のがんばりを、正当に認めてもらえる',
-};
-
-function buildMission({ code, persona, direction, wrapper }) {
-  const S = STATE_PHRASE[code];
-  const P = persona ? `${persona}が、` : '誰もが、';
-  if (wrapper === 'place') return `${P}${S}場所をつくること`;
-  if (wrapper === 'world') return `${P}${S}世界をつくること`;
-  if (wrapper === 'soft') return `${P}${S}ような毎日を、少しずつ増やすこと`;
-  if (direction === 'relieve') return `${P}もう一度、${S}ようにすること`;
-  if (direction === 'amplify') return `${P}${S}瞬間を、もっと増やすこと`;
-  if (direction === 'protect') return `${P}これからも${S}ように、守り続けること`;
-  return `${P}${S}ようにすること`;
-}
-
-const SCOPE = { work: '今の職場から', side: '週末の活動から', hobby: '身近なところから', future: '小さく試しながら' };
-
-function refineMission(meta, mode, state) {
-  if (mode === 'concrete') {
-    const scope = SCOPE[pickedTag(state, 'D4', 'distance')] || '身近なところから';
-    return `まずは${scope}、${buildMission({ ...meta, persona: meta.persona || dislikePersona(state) })}`;
-  }
-  if (mode === 'bigger') return buildMission({ ...meta, persona: '世の中のすべての人', wrapper: 'world' });
-  if (mode === 'softer') return buildMission({ ...meta, wrapper: 'soft' });
-  return buildMission(meta);
-}
 
 function primaryCode(state, scores) {
   return pickedTag(state, 'E1', 'primary') || scores.ranking[0];
 }
 
-function missionMetas(state, scores) {
-  const primary = primaryCode(state, scores);
-  const others = scores.ranking.filter((c) => c !== primary);
-  const persona = pickedTag(state, 'D1', 'persona') ?? null;
-  const direction = pickedTag(state, 'D2', 'direction') ?? null;
-  const alt = state.answers.D1?.chosen?.[0]?.id === 'p_dislike' ? PAST_PERSONA : dislikePersona(state);
-  return [
-    { code: primary, persona, direction },
-    { code: others[0], persona, direction },
-    { code: primary, persona: alt, direction },
-    { code: others[1], persona, direction, wrapper: 'place' },
-  ];
+// 6項目に共通していた気持ち：いちばん多くの項目に出ていたもの（同数なら order の順）
+export function threadOf(state, order) {
+  const items = motivesByItem(state);
+  const coverage = (c) => items.filter((item) => item.codes.includes(c)).length;
+  const code = [...order].sort((x, y) => coverage(y) - coverage(x))[0];
+  return { items, thread: coverage(code) >= 2 ? { code, count: coverage(code) } : null };
 }
+
+// --- ミッション候補 ---------------------------------------------------------------
+// AI版では、本人の好き・嫌い・自由記述から AI が候補と言い直し案を書く（generator/ai.js）。
+// ここのテンプレ文は、AIが使えないときの受け皿。本人の項目を「」で引いて、その人の分野が入るようにする。
+// ブログ記事の例（「ものづくりの楽しさを伝播すること」）にならい、「〜こと」で終わる短い一文にする。
+
+const quote = (s) => `「${s}」`;
+const MISSION_TEMPLATE = {
+  K1: (d) => `${d ? `${quote(d)}のような` : ''}しんどさを、一人で抱えこまなくていいようにすること`,
+  K2: (d) => `${d ? `${quote(d)}のような` : ''}筋の通らないことを、少しずつ正していくこと`,
+  K3: (l) => `${l ? `${quote(l)}のように` : ''}夢中になれる時間を、味わい、分かち合うこと`,
+  K4: (l) => `${l ? quote(l) : '大切なもの'}の良さを、守り、次の人に手渡すこと`,
+  K5: (l) => `${l ? `${quote(l)}のように、` : ''}自分で決めて形にする楽しさを広げること`,
+  K6: (l) => `${l ? `${quote(l)}をきっかけに、` : ''}人と人が安心してつながれるようにすること`,
+  K7: (l) => `${l ? `${quote(l)}で` : ''}がんばった人が、正当に認められるようにすること`,
+};
+
+// その気持ちがいちばん多く出ていた項目（苦しさ・おかしさは「嫌い」から、ほかは「好き」から）。出ていなければ null
+function anchorFor(state, code) {
+  const kind = code === 'K1' || code === 'K2' ? 'dislike' : 'like';
+  const list = kind === 'like' ? state.likes : state.dislikes;
+  const score = list.map(() => 0);
+  Object.values(state.answers).forEach((a) => {
+    if (a.item?.kind !== kind) return;
+    a.chosen.forEach((o) => { if (o.codes?.includes(code)) score[a.item.index] += 1; });
+  });
+  const i = argmax(score);
+  return score[i] > 0 ? list[i] : null;
+}
+
+export function templateCandidate(state, code) {
+  const text = MISSION_TEMPLATE[code](anchorFor(state, code));
+  const persona = pickedTag(state, 'D1', 'persona');
+  return {
+    code,
+    text,
+    basis: '',
+    variants: {
+      concrete: persona ? `${persona}のために、${text}` : `まずは身近なところから、${text}`,
+      bigger: `社会全体で、${text}`,
+      softer: `自分のペースで、${text}`,
+    },
+    source: 'template',
+  };
+}
+
+// AIに候補を頼む気持ち：上位4つと、6つに共通していた気持ち（E1でどれを根っこに選んでも候補がそろうように）
+export function candidatePool(state, scores) {
+  const { thread } = threadOf(state, scores.ranking);
+  return [...new Set([...scores.ranking.slice(0, 4), thread?.code].filter(Boolean))];
+}
+
+// E2 に出す候補：根っこ → 6つに共通していた気持ち → スコア順で4つ。AIの候補が無い気持ちはテンプレ文
+export function missionCandidateList(state, scores, aiCandidates) {
+  const primary = primaryCode(state, scores);
+  const order = [primary, ...scores.ranking.filter((c) => c !== primary)];
+  const { thread } = threadOf(state, order);
+  const codes = [...new Set([primary, thread?.code, ...scores.ranking].filter(Boolean))]
+    .filter((c, i) => i === 0 || scores.normalized[c] > 0)
+    .slice(0, 4);
+  return codes.map((code) => aiCandidates?.find((c) => c.code === code) || templateCandidate(state, code));
+}
+
+const candidateDesc = (c) => `「${CODE_INFO[c.code].name}」から${c.basis ? `　／　あなたの言葉「${truncate(c.basis, 30)}」` : ''}`;
 
 function evidenceHint(list) {
   const free = list.find((e) => e.kind === 'free');
@@ -308,14 +336,15 @@ function evidenceHint(list) {
   return c ? `選んだ答え：「${truncate(c.a, 28)}」` : 'まだ根拠が少ない気持ちです';
 }
 
+// AIが使えないとき（またはAIが次の問いを書けなかったとき）の、2回目の自由記述の問い
 const WHY_PROMPTS = {
-  K1: '「苦しさを減らしたい」気持ちが強く出ています。誰かのしんどさが、なぜあなたにとって見過ごせないのでしょう？',
-  K2: '「おかしいことを正したい」気持ちが強く出ています。筋の通らないことが、なぜあなたにとって見過ごせないのでしょう？',
-  K3: '「味わいたい・知りたい」気持ちが強く出ています。何に、なぜそこまで惹かれるのだと思いますか？',
-  K4: '「大切なものに応えたい」気持ちが強く出ています。それはあなたにとって、なぜかけがえがないのでしょう？',
-  K5: '「自分の力で形にしたい」気持ちが強く出ています。なぜ「自分の手で」であることが大事なのでしょう？',
-  K6: '「つながっていたい」気持ちが強く出ています。誰と、どんな関係でいたいのでしょう？ それはなぜ？',
-  K7: '「手応えや評価がほしい」気持ちが強く出ています。誰に、どんなふうに認められたいのでしょう？ それはなぜ？',
+  K1: 'ここまでの答えには「苦しさを減らしたい」気持ちがよく出ていました。誰かのしんどさが、なぜあなたにとって見過ごせないのでしょう？',
+  K2: 'ここまでの答えには「おかしいことを正したい」気持ちがよく出ていました。筋の通らないことが、なぜ見過ごせないのでしょう？',
+  K3: 'ここまでの答えには「味わいたい・知りたい」気持ちがよく出ていました。何に、なぜそこまで惹かれるのだと思いますか？',
+  K4: 'ここまでの答えには「大切なものに応えたい」気持ちがよく出ていました。それはあなたにとって、なぜかけがえがないのでしょう？',
+  K5: 'ここまでの答えには「自分で決めて、形にしたい」気持ちがよく出ていました。なぜ「自分で」であることが大事なのでしょう？',
+  K6: 'ここまでの答えには「つながっていたい」気持ちがよく出ていました。誰と、どんな関係でいたいのでしょう？ それはなぜ？',
+  K7: 'ここまでの答えには「手応えや評価がほしい」気持ちがよく出ていました。誰に、どんなふうに認められたいのでしょう？ それはなぜ？',
 };
 
 // --- 質問ビルダー ------------------------------------------------------------
@@ -367,7 +396,7 @@ const BUILDERS = {
       title: '6つのうち、いちばん心が動いた「具体的な場面」をひとつ教えてください',
       sub: 'いつ・どこで・何があった？ そのとき、どう感じた？',
       about: {
-        hint: `答えを見ると、${mark(best.label)}への反応がいちばん強そうです。ほかの項目でもかまいません。`,
+        hint: `答えを見ると、${mark(best.label)}への反応がいちばん強そうです。どの項目の話かを選ぶと、結果に残ります（選ばなくても大丈夫です）。`,
         suggested: best.id,
         options: [
           ...state.likes.map((label, i) => ({ id: `l${i}`, label })),
@@ -393,17 +422,14 @@ const BUILDERS = {
     };
   },
 
-  regulation: (step, { scores }) => {
-    const top = scores.ranking[0];
-    const title = hasSignal(scores)
-      ? `「${CODE_INFO[top].name}」という気持ちが、強く出ています。その気持ちは、どこから来ていると思う？`
-      : 'ここまでの答えに出てきた気持ちは、どこから来ていると思う？';
+  regulation: (step, { state }) => {
+    const L = regulationItem(state);
     return {
-      title,
-      sub: '2つまで選べます',
+      title: `${mark(L)}を続けているのは、なぜ？`,
+      sub: '近いものを2つまで',
       max: 2,
       weight: 0,
-      options: [...seededShuffle(REG_OPTIONS, `${step.id}:${top}`), none('正直、まだよくわからない', { regulation: 'UNK' })],
+      options: [...seededShuffle(REG_OPTIONS, `${step.id}:${L}`), none('正直、よくわからない', { regulation: 'UNK' })],
     };
   },
 
@@ -416,9 +442,9 @@ const BUILDERS = {
       max: 1,
       weight: 0,
       options: [
-        { id: 'p_dislike', label: `${mark(D)}に、モヤモヤしている人`, tags: { target: 'society', persona: `${D}にモヤモヤしている人` } },
+        { id: 'p_dislike', label: `${mark(D)}に、自分と同じようにモヤモヤしている人`, tags: { target: 'society', persona: `${quote(D)}に、自分と同じようにモヤモヤしている人` } },
         { id: 'p_past', label: '昔の自分と同じところで、つまずいている人', tags: { target: 'close', persona: PAST_PERSONA } },
-        { id: 'p_like', label: `${mark(L)}の良さを、まだ知らない人`, tags: { target: 'community', persona: `${L}の良さをまだ知らない人` } },
+        { id: 'p_like', label: `${mark(L)}の良さを、まだ知らない人`, tags: { target: 'community', persona: `${quote(L)}の良さを、まだ知らない人` } },
         { id: `p_${t}`, label: T_PERSONA[t].label, tags: { target: t, persona: T_PERSONA[t].persona } },
         none('まだ決めない', { persona: null }),
       ],
@@ -464,14 +490,17 @@ const BUILDERS = {
   }),
 
   // 根拠の自由記述が少ない上位の動機を狙って問う
-  ftWhy: (step, { scores }) => {
+  // AI版では、1回目の自由記述を読んだAIが、本人の言葉を受けて深掘りする問いを書いている（FT1 の followUp）
+  ftWhy: (step, { state, scores }) => {
+    const ft1 = state.answers.FT1;
+    const followUp = ft1 && !ft1.skipped && ft1.analyzedText === ft1.text ? ft1.followUp : '';
     const top2 = scores.ranking.slice(0, 2);
     const freeCount = (c) => scores.evidence[c].filter((e) => e.kind === 'free').length;
     const target = freeCount(top2[1]) < freeCount(top2[0]) ? top2[1] : top2[0];
     return {
-      title: hasSignal(scores)
+      title: followUp || (hasSignal(scores)
         ? WHY_PROMPTS[target]
-        : 'あなたが「好き」「嫌い」と感じるものの奥には、どんな気持ちがあると思いますか？',
+        : 'あなたが「好き」「嫌い」と感じるものの奥には、どんな気持ちがあると思いますか？'),
       sub: 'きっかけになった出来事や、思い浮かぶ人がいれば、それも。',
       placeholder: '例：小さいころ、〇〇なことがあって…',
       skippable: true,
@@ -490,43 +519,45 @@ const BUILDERS = {
     };
   },
 
-  missionCandidates: (step, { state, scores }) => {
-    const seen = new Set();
-    const opts = [];
-    missionMetas(state, scores).forEach((meta) => {
-      const text = buildMission(meta);
-      if (seen.has(text)) return;
-      seen.add(text);
-      opts.push({ id: `c${opts.length + 1}`, label: text, tags: { meta } });
-    });
+  missionCandidates: (step, { state, scores, aiCandidates }) => {
+    const list = missionCandidateList(state, scores, aiCandidates);
+    const fromAi = list.some((c) => c.source === 'ai');
     return {
       title: 'ミッションの候補です。いちばんしっくりくるのは？',
-      sub: '「誰のために、どんな価値を生み出すか」の形にしています。言い回しは、このあと直せます',
+      sub: fromAi
+        ? 'あなたの好き・嫌いと、書いてくれた言葉からつくった下書きです。言い回しは、このあと直せます'
+        : '好き・嫌いへの答えからつくった下書きです。言い回しは、このあと直せます',
       max: 1,
       weight: 0,
-      options: [...opts, none('どれも違う（自分で書く）')],
+      options: [
+        ...list.map((c, i) => ({ id: `c${i + 1}`, label: c.text, desc: candidateDesc(c), tags: { meta: c } })),
+        none('どれも違う（自分で書く）'),
+      ],
     };
   },
 
-  missionRefine: (step, { state, scores }) => {
+  // 言い直し案は、AI版ならAIが候補と一緒に書いたもの、テンプレ版なら決まった言い回し
+  missionRefine: (step, { state, scores, aiCandidates }) => {
     const e2 = state.answers.E2?.chosen?.[0];
-    const fromScratch = !e2 || e2.none;
-    const base = fromScratch ? missionMetas(state, scores)[0] : e2.meta;
-    const baseText = buildMission(base);
+    const fromScratch = !e2 || e2.none || !e2.meta?.text;
+    const base = fromScratch ? missionCandidateList(state, scores, aiCandidates)[0] : e2.meta;
+    const v = base.variants || {};
     const modes = [
-      { id: 'keep', label: 'このままでいい' },
-      { id: 'concrete', label: 'もっと具体的に' },
-      { id: 'bigger', label: 'もっと大きく' },
-      { id: 'softer', label: 'もっとやわらかく' },
-    ];
-    const options = modes.map((m) => {
-      const draft = refineMission(base, m.id, state);
-      return { id: m.id, label: m.label, desc: m.id === 'keep' ? undefined : draft, tags: { refine: m.id, draft } };
-    });
+      { id: 'keep', label: 'このままでいい', draft: base.text },
+      { id: 'concrete', label: 'もっと具体的に', draft: v.concrete },
+      { id: 'bigger', label: 'もっと大きく', draft: v.bigger },
+      { id: 'softer', label: 'もっとやわらかく', draft: v.softer },
+    ].filter((m) => m.draft);
+    const options = modes.map((m) => ({
+      id: m.id,
+      label: m.label,
+      desc: m.id === 'keep' ? undefined : m.draft,
+      tags: { refine: m.id, draft: m.draft },
+    }));
     if (fromScratch) options.push({ id: 'blank', label: 'ゼロから自分で書く', tags: { refine: 'blank', draft: '' } });
     return {
       title: fromScratch ? 'いちばん近い案をもとにするなら、どう直す？' : '選んだ案を、どう直す？',
-      context: baseText,
+      context: base.text,
       max: 1,
       weight: 0,
       options,
@@ -568,7 +599,7 @@ function analyzeFreeTextSync(text) {
     const sentence = sentences.find((s) => KEYWORDS[code].some((k) => s.includes(k)));
     if (sentence) hits.push({ code, quote: truncate(sentence, 60) });
   });
-  return { hits, inferences: [], safety: safetyCheck(text), source: 'template', weight: 1 };
+  return { hits, inferences: [], safety: safetyCheck(text), source: 'template', weight: 1, followUp: '' };
 }
 
 // --- 結果画面の文章 ------------------------------------------------------------
@@ -602,7 +633,7 @@ const NEXT_QUESTION = {
   none: 'このミッションに近づく、いちばん小さな一歩は何ですか？',
 };
 
-function resultCopySync({ state, scores }) {
+function resultCopySync({ state, scores, aiCandidates }) {
   const chosenPrimary = pickedTag(state, 'E1', 'primary');
   const primary = chosenPrimary || scores.ranking[0];
   const order = [primary, ...scores.ranking.filter((c) => c !== primary)];
@@ -620,13 +651,14 @@ function resultCopySync({ state, scores }) {
   const r = scores.regulations;
   const autonomous = r.INT || r.ID;
   const pressured = r.INJ || r.EXT;
+  const regItem = quote(regulationItem(state));
   let regulationNote;
   if (pressured) {
-    regulationNote = `${autonomous ? '楽しさや納得に加えて、' : ''}「やらなきゃ」「期待されているから」という気持ちも混ざっているようです。それ自体は悪いことではありません。ただ、楽しさや納得から来る気持ちのほうが長く続きやすいと言われています。このミッションのどこに「自分で選んだ」感覚があるか、確かめてみてください。`;
+    regulationNote = `${regItem}を続ける理由には、${autonomous ? '楽しさや納得に加えて、' : ''}「やらなきゃ」「期待されているから」という気持ちも混ざっているようです。それ自体は悪いことではありません。ただ、楽しさや納得から来る行動のほうが長く続きやすいと言われています。ミッションのどこに「自分で選んだ」感覚があるか、確かめてみてください。`;
   } else if (autonomous) {
-    regulationNote = '楽しさや納得から来ている気持ちが中心のようです。こうした気持ちは、長く続きやすいと言われています。';
+    regulationNote = `${regItem}は、楽しさや納得から続けているようです。こうした行動は長く続きやすいと言われています。ミッションにも、この感覚を残しておくと続けやすくなります。`;
   } else {
-    regulationNote = 'どこから来ている気持ちなのかは、まだはっきりしません。動きながら確かめていけば大丈夫です。';
+    regulationNote = `${regItem}を続けている理由は、まだはっきりしません。動きながら確かめていけば大丈夫です。`;
   }
 
   const unknowns = [];
@@ -643,13 +675,10 @@ function resultCopySync({ state, scores }) {
   if (!unknowns.length) unknowns.push('大きな未確定はありません。ただし、これは今日のあなたの答えです。時間をおいて、またやってみてください。');
 
   // 6項目に共通していた気持ち：いちばん多くの項目に出ていたもの（同数なら根っこ→スコアの順）
-  const items = motivesByItem(state);
-  const coverage = (c) => items.filter((item) => item.codes.includes(c)).length;
-  const threadCode = [...order].sort((x, y) => coverage(y) - coverage(x))[0];
-  const thread = coverage(threadCode) >= 2 ? { code: threadCode, count: coverage(threadCode) } : null;
+  const { items, thread } = threadOf(state, order);
 
   // ミッションは2つまで。1つ目は本人が書いた文。
-  // 2つ目は「6つに共通していた気持ち」から下書きをつくる（1つ目と同じなら、次に強い気持ちから）。結果画面で書き換えられる。
+  // 2つ目は「6つに共通していた気持ち」の候補を下書きにする（1つ目と同じなら、次に強い気持ちから）。結果画面で書き換えられる。
   const e2 = state.answers.E2?.chosen?.[0];
   const firstCode = (e2 && !e2.none && e2.meta?.code) || primary;
   const fromThread = Boolean(thread) && thread.code !== firstCode;
@@ -657,7 +686,7 @@ function resultCopySync({ state, scores }) {
   const firstText = (state.answers.FT3?.text || '').trim();
   const missions = [{ code: firstCode, text: firstText || 'ミッションはまだ書かれていません' }];
   if ((hasSignal(scores) || chosenPrimary) && scores.normalized[secondCode] > 0) {
-    const base = buildMission({ code: secondCode, persona: pickedTag(state, 'D1', 'persona') ?? null, direction });
+    const base = (aiCandidates?.find((c) => c.code === secondCode) || templateCandidate(state, secondCode)).text;
     const edit = state.mission2Edit?.base === base && state.mission2Edit.text.trim() ? state.mission2Edit.text.trim() : '';
     missions.push({ code: secondCode, text: edit || base, base, editable: true, edited: Boolean(edit), fromThread });
   }

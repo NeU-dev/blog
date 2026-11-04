@@ -32,6 +32,19 @@ function chainParts(state, copy) {
   };
 }
 
+// AIの読み解き（本人の言葉どうしのつながり）。AIが使えなかったときは出さない
+function readingHtml(copy) {
+  if (!copy.reading) return '';
+  const quotes = (copy.quotes || []).map((q) => `<li>「${esc(q)}」</li>`).join('');
+  return `
+    <section class="mf-block mf-reading">
+      <h3 class="mf-h">あなたの言葉から</h3>
+      <p>${esc(copy.reading)}</p>
+      ${quotes ? `<ul class="mf-quotes" aria-label="もとにした、あなたの言葉">${quotes}</ul>` : ''}
+      <p class="mf-note">AIが、あなたの答えと文章をつなげて書いた読み解きです。しっくりこなければ、気にしなくて大丈夫です。</p>
+    </section>`;
+}
+
 function threadSentence(copy) {
   return copy.thread
     ? `6つのうち${copy.thread.count}つに「${CODE_INFO[copy.thread.code].name}」が出ていました。`
@@ -140,6 +153,7 @@ export function resultHtml({ state, scores }, copy, { debug = false } = {}) {
     <p class="mf-result__lead">あなたのミッション（下書き）</p>
     <div class="mf-missions">${missionsHtml(copy)}</div>
     <p class="mf-blend">動機の組み合わせは <strong>${esc(copy.blend)}</strong>${copy.direction ? `、方向性は <strong>${esc(copy.direction.name)}</strong>` : ''}</p>
+    ${readingHtml(copy)}
 
     <section class="mf-block">
       <h3 class="mf-h">6つに共通していたこと</h3>
@@ -237,6 +251,12 @@ export function printHtml({ state, scores }, copy, { pageUrl = '', date = '' } =
     <p class="mfp-lead">あなたのミッション（下書き）</p>
     <ol class="mfp-missions">${missions}</ol>
     <p class="mfp-meta">動機の組み合わせ：${esc(copy.blend)}${copy.direction ? `　／　方向性：${esc(copy.direction.name)}` : ''}</p>
+    ${copy.reading ? `
+    <section class="mfp-sec">
+      <h2>あなたの言葉から</h2>
+      <p>${esc(copy.reading)}</p>
+      ${copy.quotes?.length ? `<p class="mfp-muted">${copy.quotes.map((q) => `「${esc(q)}」`).join('　')}</p>` : ''}
+    </section>` : ''}
 
     <section class="mfp-sec">
       <h2>6つに共通していたこと</h2>
@@ -294,6 +314,7 @@ export function resultText(ctx, copy, pageUrl) {
     `動機の組み合わせ：${copy.blend}`,
     ...(copy.direction ? [`方向性：${copy.direction.name}`] : []),
     `6つに共通していたこと：${threadSentence(copy)}`,
+    ...(copy.reading ? ['', copy.reading] : []),
     '',
     'ここから作れそうなもの',
     ...copy.means.map((m) => `・${m}`),

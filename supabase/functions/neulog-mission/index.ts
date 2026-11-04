@@ -1,10 +1,10 @@
-// ミッション・ファインダーのAI部分（選択肢の言い換え・自由記述の分析）。
+// ミッション・ファインダーのAI部分（選択肢の言い換え・自由記述の分析・ミッション候補・結果の読み解き）。
 // APIキーはここ（Supabase の secret）にだけ置き、ブラウザには出さない。
 // 誰でも使えるが、1人あたりとサイト全体の1日の回数に上限をかける。上限を超えたら 429 を返し、
 // 画面側はテンプレートの選択肢で続ける。
 //
 // 必要な secret：ANTHROPIC_API_KEY
-// 任意の secret：MISSION_MODEL（既定 claude-haiku-5-5）、MISSION_VISITOR_DAILY_LIMIT（既定 24 回）、
+// 任意の secret：MISSION_MODEL（既定 claude-haiku-5-5）、MISSION_VISITOR_DAILY_LIMIT（既定 30 回）、
 //               MISSION_DAILY_LIMIT（サイト全体、既定 800 回）、MISSION_AI_ENABLED（"false" で停止）
 //
 // 手元で試すとき（docs/mission-finder.md）は MISSION_LOCAL=1 を付けて deno で直接動かす。
@@ -13,14 +13,20 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@1.3.0";
-import { ANALYZE_SCHEMA, ANALYZE_SYSTEM, analyzeUserMessage, OPTIONS_SCHEMA, OPTIONS_SYSTEM, optionsUserMessage } from "./prompts.ts";
-import { pickAnalysis, pickLabels, readAnalyzeRequest, readOptionsRequest } from "./validate.ts";
+import {
+  ANALYZE_SCHEMA, ANALYZE_SYSTEM, analyzeUserMessage, MISSIONS_SCHEMA, MISSIONS_SYSTEM, missionsUserMessage,
+  OPTIONS_SCHEMA, OPTIONS_SYSTEM, optionsUserMessage, REFLECT_SCHEMA, REFLECT_SYSTEM, reflectUserMessage,
+} from "./prompts.ts";
+import {
+  pickAnalysis, pickLabels, pickMissions, pickReflection, readAnalyzeRequest, readMissionsRequest, readOptionsRequest, readReflectRequest,
+} from "./validate.ts";
 
-// 選択肢の言い換えと短い文章の読み取りなので、速くて安い Haiku で十分。
+// 短い文章の言い換え・読み取り・下書きなので、速くて安い Haiku で十分。
 const MODEL = Deno.env.get("MISSION_MODEL") || "claude-haiku-5-5";
 // 安全分類で断られたときに別モデルで自動でやり直す機能。使えるモデルのときだけ有効にする（Haiku には無い）。
 const USE_FALLBACK = /^claude-(opus-5|sonnet-5-5|fable-5)/.test(MODEL);
-const VISITOR_DAILY_LIMIT = Number(Deno.env.get("MISSION_VISITOR_DAILY_LIMIT") || 24);
+// 1回通すと、選択肢6回＋自由記述2回＋ミッション候補1回＋結果1回で、およそ10回
+const VISITOR_DAILY_LIMIT = Number(Deno.env.get("MISSION_VISITOR_DAILY_LIMIT") || 30);
 const SITE_DAILY_LIMIT = Number(Deno.env.get("MISSION_DAILY_LIMIT") || 800);
 const API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
 const AI_ENABLED = Boolean(API_KEY) && Deno.env.get("MISSION_AI_ENABLED") !== "false";
@@ -121,7 +127,23 @@ Deno.serve(async (req) => {
       if (!request) return json({ error: "invalid_request" }, 400);
       if (!await withinDailyLimits(req)) return json({ error: "daily_limit" }, 429);
       const output = await askClaude(ANALYZE_SYSTEM, analyzeUserMessage(request), ANALYZE_SCHEMA, "medium");
-      return json(pickAnalysis(request.text, output));
+      return json(pickAnalysis(request.text, output, request.followUp));
+    }
+
+    if (action === "missions") {
+      const request = readMissionsRequest(body);
+      if (!request) return json({ error: "invalid_request" }, 400);
+      if (!await withinDailyLimits(req)) return json({ error: "daily_limit" }, 429);
+      const output = await askClaude(MISSIONS_SYSTEM, missionsUserMessage(request), MISSIONS_SCHEMA, "medium");
+      return json(pickMissions(request, output));
+    }
+
+    if (action === "reflect") {
+      const request = readReflectRequest(body);
+      if (!request) return json({ error: "invalid_request" }, 400);
+      if (!await withinDailyLimits(req)) return json({ error: "daily_limit" }, 429);
+      const output = await askClaude(REFLECT_SYSTEM, reflectUserMessage(request), REFLECT_SCHEMA, "low");
+      return json(pickReflection(request, output));
     }
 
     return json({ error: "not_found" }, 404);

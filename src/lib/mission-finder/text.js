@@ -1,5 +1,6 @@
 // 文字列まわりの小さな道具。
-// 本人の言葉（好き・嫌いの項目）は ⟦…⟧ で囲んで持ち回り、画面では強調、コピー時は「」にする。
+// 本人の言葉（好き・嫌いの項目）は ⟦…⟧ で囲んで持ち回り、画面では「」つきで強調、コピー時は「」にする。
+// 「」で囲むのは、「Xがやめれない」のような文をそのまま問いに入れても、日本語が崩れないようにするため。
 
 export const mark = (s) => `⟦${s}⟧`;
 
@@ -8,7 +9,7 @@ export function esc(s) {
 }
 
 export function html(s) {
-  return esc(s).replace(/⟦(.*?)⟧/g, '<mark class="mf-item">$1</mark>');
+  return esc(s).replace(/⟦(.*?)⟧/g, '「<mark class="mf-item">$1</mark>」');
 }
 
 export function plain(s) {

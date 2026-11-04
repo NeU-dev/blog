@@ -4,17 +4,24 @@
 //   文言だけを AI に書かせる。好き・嫌い1項目ごとに、その2問ぶんをまとめて頼む。
 // - 自由記述の分析：本人の文章からの引用つきで動機を読み取らせる。
 //   本人が言っていること（testimony）だけをスコアに入れ、推測（inference）は表示だけにする。
+//   1回目の自由記述では、本人の言葉を受けて深掘りする「次の問い」も書かせ、2回目の問いに使う。
+// - ミッション候補：本人の好き・嫌い・選んだ答え・自由記述から、気持ちごとに候補と言い直し案を書かせる。
+//   どの気持ちの候補をつくるか（集計）は決定的に決め、AIは文だけを書く。
+// - 結果の読み解き：書き上げたミッションと本人の言葉のつながり、作れそうなもの、最初の一歩、次の問い。
 // - 失敗・時間切れ・1日の上限に達したときは、その場でテンプレート版に切り替える。
 //
 // APIキーはブラウザに置かない。通信先は Supabase Edge Function（neulog-mission）。
 
-import { CODES } from '../codes.js';
-import { STEPS } from '../flow.js';
-import { plain } from '../text.js';
-import { templateGenerator, SLOT_TYPES, safetyCheck } from './template.js';
+import { CODES, DIRECTIONS, DISTANCES, ROLES } from '../codes.js';
+import { STEPS, indexOfStep } from '../flow.js';
+import { computeScores } from '../scoring.js';
+import { hash, plain } from '../text.js';
+import { templateGenerator, SLOT_TYPES, safetyCheck, candidatePool } from './template.js';
 
 const OPTIONS_TIMEOUT_MS = 20_000;
 const ANALYZE_TIMEOUT_MS = 30_000;
+const MISSIONS_TIMEOUT_MS = 40_000;
+const REFLECT_TIMEOUT_MS = 30_000;
 const STATUS_TIMEOUT_MS = 5_000;
 
 export function httpTransport(endpoint, visitorId) {
@@ -44,6 +51,36 @@ function withTimeout(promise, ms) {
 
 const squash = (s) => String(s).replace(/\s+/g, '');
 
+// ミッション候補・読み解きに渡す、本人の材料（好き・嫌い・選んだ答え・自由記述・相手や関わり方）
+function material(state) {
+  const picks = (kind, index) => Object.values(state.answers)
+    .filter((a) => a.item?.kind === kind && a.item.index === index)
+    .flatMap((a) => a.chosen.filter((o) => !o.none).map((o) => o.label))
+    .slice(0, 4);
+  const free = (id) => {
+    const a = state.answers[id];
+    return a && !a.skipped && a.text?.trim() ? a.text.trim().slice(0, 600) : '';
+  };
+  const tag = (id, key) => state.answers[id]?.chosen?.find((o) => !o.none)?.[key];
+  const about = state.answers.FT1?.about;
+  const aboutLabel = about && about !== 'other' ? (about[0] === 'l' ? state.likes : state.dislikes)[Number(about.slice(1))] || '' : '';
+  const direction = tag('D2', 'direction');
+  return {
+    likes: state.likes,
+    dislikes: state.dislikes,
+    answers: [
+      ...state.likes.map((item, i) => ({ item, kind: 'like', picks: picks('like', i) })),
+      ...state.dislikes.map((item, i) => ({ item, kind: 'dislike', picks: picks('dislike', i) })),
+    ],
+    episode: { about: aboutLabel, text: free('FT1') },
+    why: { text: free('FT2') },
+    persona: tag('D1', 'persona') || '',
+    direction: direction ? `${DIRECTIONS[direction].name}（${DIRECTIONS[direction].label}）` : '',
+    roles: (state.answers.D3?.chosen || []).filter((o) => !o.none).map((o) => ROLES[o.role]),
+    distance: DISTANCES[tag('D4', 'distance')] || '',
+  };
+}
+
 export function createAiGenerator(transport) {
   // 'ai'：使える / 'limited'：今日の上限に達した / 'offline'：使えない
   let mode = 'ai';
@@ -52,6 +89,49 @@ export function createAiGenerator(transport) {
   const noteFailure = (error) => {
     if (error?.status === 429) mode = 'limited';
   };
+
+  // 同じ材料なら頼み直さない（保存した結果を使う）。材料が変わったら頼み直す
+  function cached(state, name, request, action, pick) {
+    const key = String(hash(JSON.stringify(request)));
+    const store = (state.ai ||= { options: {} });
+    if (store[name]?.key === key) return Promise.resolve(store[name].data);
+    if (mode !== 'ai') return Promise.resolve(null);
+    const id = `${name}:${key}`;
+    if (!pending.has(id)) {
+      pending.set(id, transport(action, request).then((data) => {
+        const picked = pick(data);
+        store[name] = { key, data: picked };
+        return picked;
+      }).catch((error) => {
+        noteFailure(error);
+        pending.delete(id);
+        return null;
+      }));
+    }
+    return pending.get(id);
+  }
+
+  // ミッション候補：E1（根っこを選ぶ問い）を出した時点で先に頼んでおき、E2・E3・結果で使う
+  function fetchMissions(state) {
+    const scores = computeScores(state, indexOfStep('E1'));
+    const request = { ...material(state), codes: candidatePool(state, scores) };
+    return cached(state, 'missions', request, 'missions', (data) => (data.candidates || [])
+      .filter((c) => CODES.includes(c.code) && typeof c.text === 'string' && c.text.trim())
+      // 根拠が項目名そのもの（「ゲーム」など）なら、気持ちの名前だけ見せれば十分なので出さない
+      .map((c) => ({
+        code: c.code,
+        text: c.text,
+        basis: [...state.likes, ...state.dislikes].includes(c.basis) ? '' : c.basis || '',
+        variants: c.variants || {},
+        source: 'ai',
+      })));
+  }
+
+  function fetchReflection(state, copy) {
+    // 2つ目のミッションは下書き（base）で頼む。結果画面での書き換えのたびに頼み直さないように
+    const missions = copy.missions.map((m) => ({ code: m.code, text: m.base || m.text }));
+    return cached(state, 'reflect', { ...material(state), missions }, 'reflect', (data) => data);
+  }
 
   const itemOf = (state, kind, index) => (kind === 'like' ? state.likes : state.dislikes)[index];
   const stepsOf = (kind, index) => STEPS.filter(
@@ -106,6 +186,14 @@ export function createAiGenerator(transport) {
     },
 
     async question(step, ctx) {
+      if (step.gen === 'primary') fetchMissions(ctx.state);
+      if (step.gen === 'missionCandidates' || step.gen === 'missionRefine') {
+        const aiCandidates = await withTimeout(fetchMissions(ctx.state), MISSIONS_TIMEOUT_MS).catch(() => null);
+        const q = await templateGenerator.question(step, { ...ctx, aiCandidates });
+        if (aiCandidates?.length) q.source = 'ai';
+        return q;
+      }
+
       const q = await templateGenerator.question(step, ctx);
       if (!SLOT_TYPES[step.gen]) return q;
 
@@ -133,6 +221,7 @@ export function createAiGenerator(transport) {
           text,
           likes: ctx.state.likes,
           dislikes: ctx.state.dislikes,
+          followUp: ctx.step?.id === 'FT1',
         }), ANALYZE_TIMEOUT_MS);
         // 引用が本人の文章に本当にあるものだけ残す（サーバー側でも確認済み。念のため二重に）
         const seen = new Set();
@@ -149,6 +238,7 @@ export function createAiGenerator(transport) {
           safety: data.safety === 'concern' || safetyCheck(text) === 'concern' ? 'concern' : 'none',
           source: 'ai',
           weight: 2,
+          followUp: typeof data.followUp === 'string' ? data.followUp.trim() : '',
         };
       } catch (error) {
         noteFailure(error);
@@ -156,6 +246,19 @@ export function createAiGenerator(transport) {
       }
     },
 
-    resultCopy: (ctx) => templateGenerator.resultCopy(ctx),
+    // 結果：2つ目のミッションはAIの候補から。読み解き・作れそうなもの・最初の一歩・次の問いはAIが書く
+    async resultCopy(ctx) {
+      const aiCandidates = await withTimeout(fetchMissions(ctx.state), MISSIONS_TIMEOUT_MS).catch(() => null);
+      const copy = await templateGenerator.resultCopy({ ...ctx, aiCandidates });
+      const r = await withTimeout(fetchReflection(ctx.state, copy), REFLECT_TIMEOUT_MS).catch(() => null);
+      if (r) {
+        if (r.reading) copy.reading = r.reading;
+        if (r.quotes?.length) copy.quotes = r.quotes;
+        if (r.ideas?.length) copy.means = r.ideas;
+        if (r.firstStep) copy.firstStep = r.firstStep;
+        if (r.question) copy.nextQuestion = r.question;
+      }
+      return copy;
+    },
   };
 }

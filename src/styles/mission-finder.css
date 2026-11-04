@@ -122,6 +122,8 @@
 }
 .mf .mf-option.is-none { border-style: dashed; }
 .mf .mf-option.is-none .mf-option__label { color: var(--mf-muted); }
+/* 「どれも違う」などは、選んでもマーカーを引かない（灰色の文字に線が重なって、取り消し線に見えるため） */
+.mf .mf-option.is-none[aria-pressed="true"] .mf-option__label { background-size: 0 0; color: var(--mf-ink); }
 
 /* --- ボタン ---------------------------------------------------------------- */
 
@@ -249,6 +251,9 @@
 .mf .mf-means li { position: relative; padding-left: 18px; }
 .mf .mf-means li::before { content: ""; position: absolute; left: 0; top: .75em; width: 8px; height: 8px; border-radius: 2px; background: var(--ice); }
 .mf .mf-subhead { margin: 18px 0 6px; color: var(--mf-muted); font-size: 13px; font-weight: 700; }
+.mf .mf-reading > p:first-of-type { font-size: 16px; font-weight: 700; line-height: 1.9; }
+.mf .mf-quotes { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 10px; }
+.mf .mf-quotes li { padding: 3px 10px; border: 1px solid var(--mf-line); border-radius: 999px; color: var(--mist); font-size: 13px; }
 .mf .mf-callout { padding: 12px 14px; border-left: 3px solid var(--ice); border-radius: 0 12px 12px 0; background: var(--mf-card); }
 .mf .mf-question { color: var(--mist); font-size: 18px; font-weight: 800; line-height: 1.6; }
 .mf .mf-unknowns { display: grid; gap: 6px; color: var(--mf-ink-2); font-size: 14px; }

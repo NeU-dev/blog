@@ -10,9 +10,30 @@ export const MAX_LABEL = 28;
 export type Slot = { slot: string; template: string };
 export type OptionsQuestion = { id: string; type: string; question: string; slots: Slot[] };
 export type OptionsRequest = { item: string; kind: "like" | "dislike"; questions: OptionsQuestion[] };
-export type AnalyzeRequest = { question: string; text: string; likes: string[]; dislikes: string[] };
+export type AnalyzeRequest = { question: string; text: string; likes: string[]; dislikes: string[]; followUp: boolean };
 export type CodeHit = { code: string; quote: string; basis: "testimony" | "inference" };
-export type Analysis = { codes: CodeHit[]; safety: "none" | "concern" };
+export type Analysis = { codes: CodeHit[]; safety: "none" | "concern"; followUp: string };
+
+// ミッション候補と結果の読み解きに渡す、本人の材料
+export type ItemAnswers = { item: string; kind: "like" | "dislike"; picks: string[] };
+export type Material = {
+  likes: string[];
+  dislikes: string[];
+  answers: ItemAnswers[];
+  episode: { about: string; text: string };
+  why: { text: string };
+  persona: string;
+  direction: string;
+  roles: string[];
+  distance: string;
+};
+export type MissionsRequest = Material & { codes: string[] };
+export type Variants = { concrete: string | null; bigger: string | null; softer: string | null };
+export type Candidate = { code: string; text: string; basis: string; variants: Variants };
+export type ReflectRequest = Material & { missions: { code: string; text: string }[] };
+export type Reflection = { reading: string; quotes: string[]; ideas: string[]; firstStep: string; question: string };
+
+export const MAX_MISSION = 48;
 
 type Obj = Record<string, unknown>;
 const isObj = (value: unknown): value is Obj => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -89,11 +110,11 @@ export function readAnalyzeRequest(body: unknown): AnalyzeRequest | null {
     .map((v) => text(v, 30))
     .filter((v): v is string => Boolean(v))
     .slice(0, 3);
-  return { question, text: freeText, likes: items(body.likes), dislikes: items(body.dislikes) };
+  return { question, text: freeText, likes: items(body.likes), dislikes: items(body.dislikes), followUp: body.followUp === true };
 }
 
 // 引用が本人の文章に実在するものだけを残す（言い換えや作り話の引用を落とす）
-export function pickAnalysis(sourceText: string, output: unknown): Analysis {
+export function pickAnalysis(sourceText: string, output: unknown, wantFollowUp = false): Analysis {
   const raw = isObj(output) && Array.isArray(output.codes) ? output.codes.filter(isObj) : [];
   const seen = new Set<string>();
   const codes: CodeHit[] = [];
@@ -107,5 +128,117 @@ export function pickAnalysis(sourceText: string, output: unknown): Analysis {
     codes.push({ code, quote, basis });
   }
   const safety = isObj(output) && output.safety === "concern" ? "concern" : "none";
-  return { codes, safety };
+  const followUp = wantFollowUp && isObj(output) ? cleanSentence(output.followUp, 90, true) || "" : "";
+  return { codes, safety, followUp };
+}
+
+// --- ミッション候補・結果の読み解き ---------------------------------------------
+
+// 文として出すものの検査。長すぎ・タグ入り・用語入りは捨てる。keepPeriod なら文末の句点を残す
+export function cleanSentence(value: unknown, max: number, keepPeriod = false): string | null {
+  if (typeof value !== "string") return null;
+  let sentence = value.replace(/\s+/g, " ").trim();
+  if (!keepPeriod) sentence = sentence.replace(/[。．.]+$/, "");
+  if (!sentence || length(sentence) > max || /[<>]/.test(sentence)) return null;
+  if (FORBIDDEN.some((word) => sentence.includes(word))) return null;
+  return sentence;
+}
+
+// ミッションは「〜こと」で終わる一文（ブログ記事の例「ものづくりの楽しさを伝播すること」と同じ形）
+export function cleanMission(value: unknown): string | null {
+  const mission = cleanSentence(value, MAX_MISSION);
+  return mission && mission.endsWith("こと") ? mission : null;
+}
+
+const strings = (value: unknown, max: number, count: number) => (Array.isArray(value) ? value : [])
+  .map((v) => text(v, max))
+  .filter((v): v is string => Boolean(v))
+  .slice(0, count);
+const optional = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+function readMaterial(body: Obj): Material | null {
+  const likes = strings(body.likes, 30, 3);
+  const dislikes = strings(body.dislikes, 30, 3);
+  if (!likes.length || !dislikes.length) return null;
+  const answers = (Array.isArray(body.answers) ? body.answers : []).filter(isObj).slice(0, 6)
+    .map((a): ItemAnswers => ({ item: optional(a.item, 30), kind: a.kind === "dislike" ? "dislike" : "like", picks: strings(a.picks, 40, 4) }))
+    .filter((a) => a.item);
+  const episode = isObj(body.episode) ? body.episode : {};
+  const why = isObj(body.why) ? body.why : {};
+  return {
+    likes,
+    dislikes,
+    answers,
+    episode: { about: optional(episode.about, 30), text: optional(episode.text, 600) },
+    why: { text: optional(why.text, 600) },
+    persona: optional(body.persona, 60),
+    direction: optional(body.direction, 80),
+    roles: strings(body.roles, 20, 3),
+    distance: optional(body.distance, 20),
+  };
+}
+
+// 引用の照合に使う、本人が書いた文字だけ（選択肢の文言はAIが書いたものもあるので含めない）
+function ownWords(material: Material, extra: string[] = []) {
+  return squash([...material.likes, ...material.dislikes, material.episode.about, material.episode.text, material.why.text, ...extra].join("\n"));
+}
+
+function quoteFrom(source: string, value: unknown, max = 40): string {
+  const quote = typeof value === "string" ? value.trim().replace(/^「|」$/g, "") : "";
+  return quote && length(quote) <= max && source.includes(squash(quote)) ? quote : "";
+}
+
+export function readMissionsRequest(body: unknown): MissionsRequest | null {
+  if (!isObj(body)) return null;
+  const material = readMaterial(body);
+  if (!material || !Array.isArray(body.codes)) return null;
+  const codes = [...new Set(body.codes.filter((c): c is string => typeof c === "string" && CODES.includes(c)))].slice(0, 5);
+  return codes.length ? { ...material, codes } : null;
+}
+
+// 頼んだ気持ちごとに1つ。「こと」で終わらない・長すぎる・同じ文の候補は捨てる（足りない分は画面側でテンプレ文を使う）
+export function pickMissions(request: MissionsRequest, output: unknown): { candidates: Candidate[] } {
+  const list = isObj(output) && Array.isArray(output.candidates) ? output.candidates.filter(isObj) : [];
+  const source = ownWords(request);
+  const seen = new Set<string>();
+  const candidates: Candidate[] = [];
+  for (const code of request.codes) {
+    const found = list.find((c) => c.code === code);
+    const mission = found ? cleanMission(found.text) : null;
+    if (!found || !mission || seen.has(mission)) continue;
+    seen.add(mission);
+    const v = isObj(found.variants) ? found.variants : {};
+    candidates.push({
+      code,
+      text: mission,
+      basis: quoteFrom(source, found.basis),
+      variants: { concrete: cleanMission(v.concrete), bigger: cleanMission(v.bigger), softer: cleanMission(v.softer) },
+    });
+  }
+  return { candidates };
+}
+
+export function readReflectRequest(body: unknown): ReflectRequest | null {
+  if (!isObj(body)) return null;
+  const material = readMaterial(body);
+  if (!material || !Array.isArray(body.missions)) return null;
+  const missions = body.missions.filter(isObj).slice(0, 2)
+    .map((m) => ({ code: typeof m.code === "string" && CODES.includes(m.code) ? m.code : "", text: text(m.text, 200) || "" }))
+    .filter((m) => m.code && m.text);
+  return missions.length ? { ...material, missions } : null;
+}
+
+export function pickReflection(request: ReflectRequest, output: unknown): Reflection {
+  const o = isObj(output) ? output : {};
+  const source = ownWords(request, request.missions.map((m) => m.text));
+  const list = (value: unknown) => (Array.isArray(value) ? value : []);
+  const quotes = [...new Set(list(o.quotes).map((q) => quoteFrom(source, q)).filter(Boolean))].slice(0, 3);
+  const ideas = [...new Set(list(o.ideas).map((i) => cleanSentence(i, 50)).filter((i): i is string => Boolean(i)))].slice(0, 3);
+  return {
+    reading: cleanSentence(o.reading, 200, true) || "",
+    quotes,
+    ideas,
+    firstStep: cleanSentence(o.firstStep, 80) || "",
+    question: cleanSentence(o.question, 60, true) || "",
+  };
 }

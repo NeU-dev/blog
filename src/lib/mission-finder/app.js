@@ -8,7 +8,7 @@ import { computeScores } from './scoring.js';
 import { templateGenerator } from './generator/template.js';
 import { createAiGenerator, httpTransport } from './generator/ai.js';
 import { printHtml, resultHtml, resultText } from './result.js';
-import { esc, html, hash } from './text.js';
+import { esc, html, hash, plain } from './text.js';
 import { load, save, clear } from './store.js';
 import { COMMUNITY_URL, visitorId } from '../community';
 
@@ -123,8 +123,11 @@ export async function mountMissionFinder(root) {
 
     const ctx = { state, step, scores: computeScores(state, state.stepIndex) };
 
+    const aiOn = generator.name === 'ai' && generator.mode === 'ai';
     if (step.kind === 'result') {
+      const timer = showLoadingLater(aiOn ? 'あなたの言葉をもとに、結果をまとめています…' : '結果をまとめています…');
       const copy = await generator.resultCopy(ctx);
+      clearTimeout(timer);
       if (token !== renderToken) return;
       current = { step, ctx, copy };
       screen.innerHTML = resultHtml(ctx, copy, { debug: dev.debug });
@@ -132,9 +135,11 @@ export async function mountMissionFinder(root) {
     }
 
     const isSlot = step.phase === 'A' || step.phase === 'B';
-    const timer = showLoadingLater(isSlot && generator.name === 'ai' && generator.mode === 'ai'
-      ? 'あなたの言葉に合わせて、選択肢を書いています…'
-      : '準備しています…');
+    const isMission = step.id === 'E2' || step.id === 'E3';
+    let loading = '準備しています…';
+    if (aiOn && isSlot) loading = 'あなたの言葉に合わせて、選択肢を書いています…';
+    if (aiOn && isMission) loading = 'あなたの好き・嫌いと言葉から、ミッションの候補を書いています…';
+    const timer = showLoadingLater(loading);
     const q = await generator.question(step, ctx);
     clearTimeout(timer);
     if (token !== renderToken) return;
@@ -271,7 +276,8 @@ export async function mountMissionFinder(root) {
       persist();
     }
     const text = a?.text || '';
-    const about = a?.about || q.about?.suggested;
+    // どの項目の話かは、本人が選んだときだけ記録する（提案した項目を勝手に選ばない）
+    const about = a?.about;
     screen.innerHTML = `
       <div class="mf-q">
         ${limitNotice()}
@@ -289,7 +295,6 @@ export async function mountMissionFinder(root) {
         </div>
       </div>
       ${navHtml(text.trim().length > 0 || Boolean(a?.skipped))}`;
-    if (q.about && !a?.about) updateFree({ about });
   }
 
   // 深刻な内容が書かれていそうなときは、先へ進む前に相談先を出す
@@ -331,7 +336,7 @@ export async function mountMissionFinder(root) {
       item: q.item || null,
       chosen: picks.map((id) => {
         const o = q.options.find((x) => x.id === id);
-        return { id, label: o.label.replace(/[⟦⟧]/g, ''), codes: o.codes || [], none: Boolean(o.none), ...(o.tags || {}) };
+        return { id, label: plain(o.label), codes: o.codes || [], none: Boolean(o.none), ...(o.tags || {}) };
       }),
     };
     persist();

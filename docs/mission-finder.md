@@ -46,9 +46,12 @@ AIが使えないときは `DEFAULT_ORDER` の順番で聞く。一度出した�
 | `src/lib/mission-finder/generator/ai.js` | AI版の生成器（選択肢の言い換え・掘る問いの計画・その場の問い・自由記述の分析・ミッション候補・結果の読み解き） |
 | `src/lib/mission-finder/scoring.js` | 集計（AIを使わず決定的に計算） |
 | `src/lib/mission-finder/app.js` | 画面と操作。`mountMissionFinder(枠)` |
+| `src/lib/mission-finder/pdf.js` | 結果を A4 の PDF にしてダウンロードさせる |
 | `src/styles/mission-finder.css` | 見た目（記事内アンケートと同じ系統） |
 | `supabase/functions/neulog-mission/` | AIを呼ぶ Edge Function。APIキーはここにだけ置く |
+| `supabase/functions/neulog-mission/progress.ts` | 進み具合（何人がどの問いまで進んだか）の受け取りと集計 |
 | `supabase/migrations/20261028000000_add_mission_finder_rate_limits.sql` | 1日の回数制限に使うアクション名を追加 |
+| `supabase/migrations/20261104120000_add_mission_finder_progress.sql` | 進み具合の表（`neulog_mission_runs`）と、記録する関数 |
 
 ## AIを有効にする（公開の手順）
 
@@ -84,6 +87,17 @@ AIの関数を公開するまでは、ツールはテンプレート版で動く
 1回通したときのAI呼び出し（およそ11回）：選択肢の言い換え2回、掘る問いの計画2回、その場の問い3回（好き・嫌いの「もう一段なぜ」と、つなぐ問い）、自由記述の読み取り2回、ミッション候補1回、結果の読み解き1回。実際の金額は Anthropic Console の使用量で確かめる。
 
 上限を超えると、画面に一度だけお知らせを出して、定型の選択肢で続ける。
+
+## 進み具合を数える
+
+何人が、どの問いまで進んだかだけを数える。答えの中身（好き・嫌い・選んだ選択肢・自由記述・ミッション）は送らない。
+
+- 画面は、前の問いへ進んだとき（戻ったときは送らない）と、PDF保存・コピーをしたときに、`neulog-mission?action=progress` へ `{ run, step, ai, event }` だけを送る。`run` は1回の利用ごとの乱数で、「やり直す」で新しくなる
+- 関数は、訪問者のハッシュ（回数制限と同じもの）と一緒に、いちばん先まで進んだ問い・PDF保存・コピーだけを `neulog_mission_runs` に残す。1人1時間200回まで
+- 集計は `neulog-mission?action=funnel`（`x-neulog-dashboard` ヘッダーに `DASHBOARD_ACCESS_KEY`）。ブログエディタの「アクティビティ」の下に、問いごとの人数と、いちばん多く止まった問いが出る
+- 人数は、同じ人が何回やっても、いちばん先まで進んだ回で1人と数える
+- 開発中は、`?mission-ai=local` で手元の関数につないだときだけ送る
+- 問いの並びを `flow.js` で変えたら、`progress.ts` の `PROGRESS_STEPS` も合わせる（`progress_test.ts` が照らし合わせる）
 
 ## 手元で試す
 

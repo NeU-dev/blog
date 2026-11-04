@@ -7,6 +7,9 @@
 // 任意の secret：MISSION_MODEL（既定 claude-haiku-5-5）、MISSION_VISITOR_DAILY_LIMIT（既定 30 回）、
 //               MISSION_DAILY_LIMIT（サイト全体、既定 800 回）、MISSION_AI_ENABLED（"false" で停止）
 //
+// 進み具合（何人がどの問いまで進んだか）も、ここで記録・集計する（progress.ts）。答えの中身は受け取らない。
+// 集計は、ブログエディタのダッシュボードから DASHBOARD_ACCESS_KEY で読む。
+//
 // 手元で試すとき（docs/mission-finder.md）は MISSION_LOCAL=1 を付けて deno で直接動かす。
 // そのときは Supabase につながず、回数制限もかけない。
 
@@ -22,6 +25,7 @@ import {
   pickAnalysis, pickAsk, pickLabels, pickMissions, pickPlan, pickReflection, readAnalyzeRequest, readAskRequest, readMissionsRequest,
   readOptionsRequest, readPlanRequest, readReflectRequest,
 } from "./validate.ts";
+import { readProgressRequest, type RunRow, summarizeFunnel } from "./progress.ts";
 
 // 短い文章の言い換え・読み取り・下書きなので、速くて安い Haiku で十分。
 const MODEL = Deno.env.get("MISSION_MODEL") || "claude-haiku-5-5";
@@ -34,6 +38,8 @@ const API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
 const AI_ENABLED = Boolean(API_KEY) && Deno.env.get("MISSION_AI_ENABLED") !== "false";
 const LOCAL = Deno.env.get("MISSION_LOCAL") === "1";
 const DAY_MINUTES = 24 * 60;
+// 1回通すと、問いの数（約30）＋PDF・コピーで30回ほど記録する
+const PROGRESS_HOURLY_LIMIT = 200;
 
 const headers = {
   "Access-Control-Allow-Headers": "content-type, x-neulog-visitor",
@@ -76,6 +82,27 @@ async function rateLimit(visitorHash: string, action: string, limit: number, min
   await supabase.from("neulog_rate_limits").update({ request_count: data.request_count + 1 }).eq("visitor_hash", visitorHash).eq("action", action);
   return true;
 }
+async function secureEqual(left: string, right: string) {
+  const [a, b] = await Promise.all([sha256(left), sha256(right)]);
+  let difference = 0;
+  for (let i = 0; i < a.length; i++) difference |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return difference === 0;
+}
+async function dashboardAllowed(req: Request) {
+  const expected = Deno.env.get("DASHBOARD_ACCESS_KEY") || "";
+  const supplied = req.headers.get("x-neulog-dashboard") || "";
+  return Boolean(expected && supplied) && secureEqual(expected, supplied);
+}
+async function funnelSnapshot() {
+  if (!supabase) return summarizeFunnel([]); // 手元モード
+  const { data, error } = await supabase.from("neulog_mission_runs")
+    .select("visitor_hash, furthest_step, furthest_index, ai, saved_pdf, copied, started_at")
+    .order("started_at", { ascending: false })
+    .limit(20000);
+  if (error) throw error;
+  return summarizeFunnel((data || []) as RunRow[]);
+}
+
 async function withinDailyLimits(req: Request) {
   const visitorHash = await sha256(visitorSource(req));
   if (!await rateLimit(visitorHash, "mission_ai", VISITOR_DAILY_LIMIT, DAY_MINUTES)) return false;
@@ -103,7 +130,8 @@ Deno.serve(async (req) => {
   const origin = req.headers.get("origin") || "";
   const responseHeaders = {
     ...headers,
-    "Access-Control-Allow-Origin": allowedOrigins.has(origin) ? origin : "https://neu-dev.net",
+    // 手元モードでは、どのポートの開発サーバーからでも呼べるようにする
+    "Access-Control-Allow-Origin": allowedOrigins.has(origin) || (LOCAL && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) ? origin : "https://neu-dev.net",
     "Vary": "Origin",
   };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: responseHeaders });
@@ -112,9 +140,34 @@ Deno.serve(async (req) => {
   try {
     const action = new URL(req.url).searchParams.get("action") || "";
     if (req.method === "GET" && action === "status") return json({ ai: AI_ENABLED });
+    if (req.method === "GET" && action === "funnel") {
+      if (!await dashboardAllowed(req)) return json({ error: "unauthorized" }, 401);
+      return json({ funnel: await funnelSnapshot() });
+    }
     if (req.method !== "POST") return json({ error: "not_found" }, 404);
-    if (!AI_ENABLED) return json({ error: "ai_disabled" }, 503);
     const body = await req.json().catch(() => null);
+
+    // 進み具合はAIを止めていても数える
+    if (action === "progress") {
+      const request = readProgressRequest(body);
+      if (!request) return json({ error: "invalid_request" }, 400);
+      if (supabase) {
+        const visitorHash = await sha256(visitorSource(req));
+        if (!await rateLimit(visitorHash, "mission_progress", PROGRESS_HOURLY_LIMIT, 60)) return json({ error: "too_many" }, 429);
+        const { error } = await supabase.rpc("neulog_record_mission_progress", {
+          p_run: request.run,
+          p_visitor: visitorHash,
+          p_step: request.step,
+          p_index: request.index,
+          p_ai: request.ai,
+          p_event: request.event,
+        });
+        if (error) throw error;
+      }
+      return json({ ok: true });
+    }
+
+    if (!AI_ENABLED) return json({ error: "ai_disabled" }, 503);
 
     if (action === "options") {
       const request = readOptionsRequest(body);

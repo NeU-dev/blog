@@ -33,6 +33,19 @@ function devParams() {
   return { ai: params.get('mission-ai'), debug: params.has('mission-debug') };
 }
 
+// 進み具合（何人がどの問いまで進んだか）だけを数える。答えの中身は送らない。
+// 開発中は、手元の関数につないだときだけ送る
+function progressEndpoint(devAi) {
+  if (!import.meta.env.DEV) return MISSION_URL;
+  return devAi === 'local' ? LOCAL_MISSION_URL : null;
+}
+
+// 1回の利用ごとの番号。古いブラウザには randomUUID が無いので、乱数から作る
+function newRunId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+}
+
 async function chooseGenerator(devAi) {
   if (devAi === 'off') return templateGenerator;
   let transport;
@@ -66,6 +79,7 @@ export async function mountMissionFinder(root) {
   const panel = root.querySelector('.mf');
   const screen = root.querySelector('.mf__screen');
   const dev = devParams();
+  const progressUrl = progressEndpoint(dev.ai);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let generator = templateGenerator;
@@ -206,7 +220,7 @@ export async function mountMissionFinder(root) {
           <li><b>03</b><strong>書く</strong><span>途中で3回、自分の言葉で書く</span></li>
           <li><b>04</b><strong>受け取る</strong><span>ミッションの下書きと、その根拠</span></li>
         </ol>
-        <p class="mf-note">所要時間は10〜15分です。答えはこの端末の中にだけ保存されます。AIつきのときは、問いや結果の文章をつくるために、答えをAI（Anthropic の Claude）に送ります。</p>
+        <p class="mf-note">所要時間は10〜15分です。答えはこの端末の中にだけ保存されます。どこまで進んだかだけは、答えの中身なしで数えています。AIつきのときは、問いや結果の文章をつくるために、答えをAI（Anthropic の Claude）に送ります。</p>
         <div class="mf-intro__actions">
           <button type="button" class="mf-btn mf-btn--primary mf-btn--wide" data-act="next">はじめる</button>
           ${hasAnswers ? '<button type="button" class="mf-btn mf-btn--text" data-act="restart">回答を消して最初から</button>' : ''}
@@ -400,9 +414,26 @@ export async function mountMissionFinder(root) {
     panel.focus({ preventScroll: true });
   }
 
+  // 進み具合を送る。いちばん先まで進んだ問いだけ（戻ったときは送らない）。PDF保存・コピーは event で送る
+  function track(event = null) {
+    const step = currentStep();
+    if (!progressUrl || step.kind === 'intro') return;
+    if (!event && state.stepIndex <= (state.tracked || 0)) return;
+    state.run ||= newRunId();
+    if (!event) state.tracked = state.stepIndex;
+    persist();
+    fetch(`${progressUrl}?action=progress`, {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'x-neulog-visitor': visitorId() },
+      body: JSON.stringify({ run: state.run, step: step.id, ai: generator.name === 'ai' && generator.mode === 'ai', event }),
+    }).catch(() => {});
+  }
+
   async function go(index) {
     state.stepIndex = Math.max(0, Math.min(index, STEPS.length - 1));
     persist();
+    track();
     bringIntoView();
     await render();
   }
@@ -477,6 +508,7 @@ export async function mountMissionFinder(root) {
     try {
       await navigator.clipboard.writeText(resultText(current.ctx, current.copy, `${location.origin}${location.pathname}`));
       toast('結果をコピーしました');
+      track('copy');
     } catch {
       toast('コピーできませんでした。文章を選択してコピーしてください');
     }
@@ -518,6 +550,7 @@ export async function mountMissionFinder(root) {
       });
       await downloadPdf(html, `mission-finder-${ymd}.pdf`);
       toast('PDFを保存しました');
+      track('pdf');
     } catch (error) {
       console.error(error);
       toast('PDFを作れませんでした。「結果をコピー」で残してください');

@@ -9,6 +9,10 @@ export interface NoteArticle {
 export const NOTE_PROFILE_URL = 'https://note.com/quick_minnow8178';
 const NOTE_FEED_URL = `${NOTE_PROFILE_URL}/rss/`;
 
+// ブログのカードに出さない note 記事（URL の末尾の記事 ID）
+const HIDDEN_NOTE_IDS = new Set(['nf83466830409']);
+const isVisible = (article: NoteArticle) => !HIDDEN_NOTE_IDS.has(article.url.replace(/\/$/, '').split('/').pop() ?? '');
+
 // noteのRSSが一時的に取得できないビルドでも、直近の記事カードを残す。
 const fallbackArticles: NoteArticle[] = [
   {
@@ -88,10 +92,10 @@ export async function getNoteArticles(limit = 6): Promise<NoteArticle[]> {
   try {
     const response = await fetch(NOTE_FEED_URL, { headers: { accept: 'application/rss+xml, text/xml' } });
     if (!response.ok) throw new Error(`note RSS returned ${response.status}`);
-    const articles = parseFeed(await response.text());
+    const articles = parseFeed(await response.text()).filter(isVisible);
     if (articles.length > 0) return articles.slice(0, limit);
   } catch {
     // Public cards should remain available when note is temporarily unreachable.
   }
-  return fallbackArticles.slice(0, limit);
+  return fallbackArticles.filter(isVisible).slice(0, limit);
 }

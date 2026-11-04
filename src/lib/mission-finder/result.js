@@ -1,4 +1,4 @@
-// 結果画面と、PDF（印刷）用のA4レイアウト。
+// 結果画面と、PDF用のA4レイアウト。
 // 数値（バーの長さ）は scoring.js、文章は生成器の resultCopy から受け取る。
 
 import { CODE_INFO, ROLES, DISTANCES } from './codes.js';
@@ -202,10 +202,10 @@ export function resultHtml({ state, scores }, copy, { debug = false } = {}) {
   </div>`;
 }
 
-// --- PDF（印刷）用 ------------------------------------------------------------
-// 記事ページの上に重ねて印刷し、ブラウザの「PDFとして保存」で書き出す。明るい紙の配色にする。
+// --- PDF用 ------------------------------------------------------------------
+// 画面の外に描いて画像にし、A4 の PDF にする（pdf.js）。明るい紙の配色にする。
 
-export function printHtml({ state, scores }, copy, { pageUrl = '', date = '' } = {}) {
+export function pdfHtml({ state, scores }, copy, { pageUrl = '', date = '' } = {}) {
   const chain = chainParts(state, copy);
   const max = Math.max(...copy.order.map((c) => scores.normalized[c]), 0.0001);
 

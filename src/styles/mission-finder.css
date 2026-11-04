@@ -283,21 +283,14 @@
   .mf *, .mf *::before, .mf *::after { animation: none !important; transition: none !important; }
 }
 
-/* --- PDF（印刷）用の紙面 ------------------------------------------------------
-   「PDFで保存」を押したときだけ body の直下に .mf-print-root を置き、印刷ではそれ以外を隠す。
-   画面には出さない。白い紙で読めるよう、色は濃いめにする。 */
+/* --- PDF用の紙面 --------------------------------------------------------------
+   「PDFで保存」を押したときだけ body の直下に .mf-pdf-host を置き、画面の外で描いて画像にする（pdf.js）。
+   幅は pdf.js が A4 の本文幅に合わせる。白い紙で読めるよう、色は濃いめにする。 */
 
-@page { size: A4; margin: 14mm 14mm 16mm; }
-
-.mf-print-root { display: none; }
-
-@media print {
-  body.mf-printing { background: #fff !important; }
-  body.mf-printing > :not(.mf-print-root) { display: none !important; }
-  body.mf-printing > .mf-print-root { display: block; }
-}
-
-.mf-print-root {
+.mf-pdf-host {
+  position: absolute;
+  top: 0;
+  left: -10000px;
   --mf-k1: #d6478c;
   --mf-k2: #3f57c0;
   --mf-k3: #c48a0e;
@@ -310,8 +303,6 @@
   font-family: var(--font);
   font-size: 10.5pt;
   line-height: 1.7;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
 }
 .mfp :where(p, h2, ul, ol, li, dl, dt, dd, table) { margin: 0; padding: 0; list-style: none; }
 .mfp-head { display: flex; justify-content: space-between; padding-bottom: 6pt; border-bottom: 1.5pt solid #2a2d32; font-size: 9pt; font-weight: 700; }
@@ -319,7 +310,8 @@
 .mfp-missions { display: grid; gap: 8pt; margin-top: 4pt; }
 .mfp-missions li { display: grid; grid-template-columns: 22pt 1fr; gap: 4pt; break-inside: avoid; }
 .mfp-missions b { padding-top: 4pt; color: #3b4fc4; font: 700 10pt var(--font-mono); }
-.mfp-mission { font-size: 17pt; font-weight: 900; line-height: 1.55; background: linear-gradient(transparent 62%, rgb(142 205 245 / .55) 62%); -webkit-box-decoration-break: clone; box-decoration-break: clone; display: inline; }
+/* 複数行の行内マーカーは画像にすると崩れるので、ブロックの淡い帯にする */
+.mfp-mission { padding: 2pt 7pt; border-left: 3pt solid #8ecdf5; border-radius: 2pt; background: rgb(142 205 245 / .22); font-size: 17pt; font-weight: 900; line-height: 1.55; }
 .mfp-mission.is-second { font-size: 13pt; }
 .mfp-from { margin-top: 2pt; color: #6f747c; font-size: 8.5pt; }
 .mfp-meta { margin-top: 10pt; font-size: 9.5pt; font-weight: 700; }
@@ -335,7 +327,7 @@
 .mfp-chain { display: grid; grid-template-columns: 5.5em 1fr; gap: 3pt 8pt; }
 .mfp-chain dt { color: #3b4fc4; font-size: 9pt; font-weight: 800; }
 .mfp-bars { display: grid; gap: 3pt; }
-.mfp-bar { display: grid; grid-template-columns: 11em 1fr; align-items: center; gap: 8pt; font-size: 9pt; }
+.mfp-bar { display: grid; grid-template-columns: 12.5em 1fr; align-items: center; gap: 8pt; font-size: 9pt; }
 .mfp-bar i { display: block; height: 5pt; border-radius: 3pt; background: #e5e8ec; overflow: hidden; }
 .mfp-bar u { display: block; height: 100%; background: var(--c); }
 .mfp-list li { position: relative; padding-left: 10pt; }

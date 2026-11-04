@@ -7,7 +7,8 @@ import { STEPS, PHASES, indexOfStep } from './flow.js';
 import { computeScores } from './scoring.js';
 import { templateGenerator } from './generator/template.js';
 import { createAiGenerator, httpTransport } from './generator/ai.js';
-import { printHtml, resultHtml, resultText } from './result.js';
+import { pdfHtml, resultHtml, resultText } from './result.js';
+import { downloadPdf } from './pdf.js';
 import { esc, html, hash, plain } from './text.js';
 import { load, save, clear } from './store.js';
 import { COMMUNITY_URL, visitorId } from '../community';
@@ -462,6 +463,7 @@ export async function mountMissionFinder(root) {
   }
 
   function toast(message) {
+    panel.querySelectorAll('.mf-toast').forEach((old) => old.remove());
     const el = document.createElement('div');
     el.className = 'mf-toast';
     el.setAttribute('role', 'status');
@@ -501,30 +503,31 @@ export async function mountMissionFinder(root) {
     screen.querySelector('[data-ref="mission2-state"]').textContent = m2.edited ? '・自分の言葉に書き換え済み' : '・下書き';
   }
 
-  // PDF：結果をA4の紙面にしてページに重ね、ブラウザの印刷（「PDFとして保存」）を開く。
-  // 日本語フォントを埋め込む必要がなく、iPhone でも「共有 → PDF」で保存できる。
-  function printResult() {
-    if (!current?.copy) return;
-    document.querySelector('.mf-print-root')?.remove();
-    const sheet = document.createElement('div');
-    sheet.className = 'mf-print-root';
-    sheet.setAttribute('aria-hidden', 'true');
-    sheet.innerHTML = printHtml(current.ctx, current.copy, {
-      pageUrl: `${location.origin}${location.pathname}`,
-      date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }),
-    });
-    document.body.appendChild(sheet);
-    document.body.classList.add('mf-printing');
-    window.addEventListener('afterprint', () => {
-      document.body.classList.remove('mf-printing');
-      sheet.remove();
-    }, { once: true });
-    toast('印刷の画面で「PDFとして保存」を選んでください');
-    setTimeout(() => window.print(), 60);
+  // PDF：結果をA4の紙面にして、PDFファイルとしてそのままダウンロードさせる（pdf.js）。
+  let savingPdf = false;
+  async function savePdf() {
+    if (!current?.copy || savingPdf) return;
+    savingPdf = true;
+    toast('PDFを作っています…');
+    const now = new Date();
+    const ymd = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map((v) => String(v).padStart(2, '0')).join('-');
+    try {
+      const html = pdfHtml(current.ctx, current.copy, {
+        pageUrl: `${location.origin}${location.pathname}`,
+        date: now.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }),
+      });
+      await downloadPdf(html, `mission-finder-${ymd}.pdf`);
+      toast('PDFを保存しました');
+    } catch (error) {
+      console.error(error);
+      toast('PDFを作れませんでした。「結果をコピー」で残してください');
+    } finally {
+      savingPdf = false;
+    }
   }
 
   const ACTIONS = {
-    pdf: printResult,
+    pdf: savePdf,
     'edit-m2': toggleMission2Edit,
     next,
     back,

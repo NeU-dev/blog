@@ -1,0 +1,53 @@
+---
+// 記事の一覧。ノートの目次のように、左の余白に日付と種類、右に題名と画像を置く。
+export interface PostEntry {
+  title: string;
+  href: string;
+  category: 'tech' | 'diary' | 'note';
+  pubDate: Date;
+  description?: string;
+  coverImage?: string;
+  external?: boolean;
+}
+
+interface Props {
+  posts: PostEntry[];
+  ruled?: boolean;
+  // 一覧ページでは h1 の直下に並ぶので h2、トップでは「最近の記事」の下なので h3
+  headingLevel?: 2 | 3;
+}
+
+import { postTransitionName } from '../lib/view-transition';
+
+const { posts, ruled = false, headingLevel = 3 } = Astro.props;
+const Heading = headingLevel === 2 ? 'h2' : 'h3';
+const categoryLabel = { tech: '技術', diary: '日記', note: 'note' } as const;
+---
+
+<ol class:list={['post-list', { 'post-list--ruled': ruled }]}>
+  {posts.map((post, index) => {
+    // 記事ページへ移るとき、題名と画像がそのまま記事の見出しとカバーへ飛んでいく
+    const name = post.external ? undefined : postTransitionName(post.href);
+    return (
+    <li class="post-entry" data-cursor={post.external ? 'noteで読む' : '読む'}>
+      <div class="post-entry__margin">
+        <time datetime={post.pubDate.toISOString()}>{post.pubDate.toLocaleDateString('ja-JP').replaceAll('/', '.')}</time>
+        <span class="post-entry__cat">{categoryLabel[post.category]}</span>
+      </div>
+      <div class="post-entry__body">
+        <Heading class="post-entry__title" style={name ? `view-transition-name: t-${name}; view-transition-class: post-morph` : undefined}>
+          {post.external
+            ? <a href={post.href} target="_blank" rel="noopener noreferrer">{post.title}<span class="post-entry__ext" aria-label="（noteで開きます）">↗</span></a>
+            : <a href={post.href}>{post.title}</a>}
+        </Heading>
+        {post.description && <p class="post-entry__excerpt">{post.description}</p>}
+      </div>
+      {post.coverImage && (
+        <span class="post-entry__media" style={name ? `view-transition-name: i-${name}; view-transition-class: post-morph` : undefined}>
+          <img src={post.coverImage} alt="" width="1200" height="675" loading={index < 3 ? 'eager' : 'lazy'} decoding="async" />
+        </span>
+      )}
+    </li>
+    );
+  })}
+</ol>

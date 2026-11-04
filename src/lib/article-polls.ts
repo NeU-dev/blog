@@ -52,7 +52,7 @@ function enhancePoll(root: HTMLElement, articleSlug: string) {
   const header = make('div', 'article-poll__header');
   const headerMeta = make('div', 'article-poll__header-meta');
   const totalBadge = make('span', 'article-poll__total', '投票後に結果表示');
-  headerMeta.append(make('span', 'article-poll__kicker', 'READER SELECT'), totalBadge);
+  headerMeta.append(make('span', 'article-poll__kicker', 'アンケート'), totalBadge);
   header.append(
     headerMeta,
     make('h2', 'article-poll__question', question),
@@ -73,7 +73,7 @@ function enhancePoll(root: HTMLElement, articleSlug: string) {
     const meter = make('i', 'article-poll__meter');
     meter.append(make('u'));
     result.append(meter, make('em', '', '集計中…'));
-    button.append(make('b', '', String(index + 1).padStart(2, '0')), label, result);
+    button.append(make('b', '', String(index + 1)), label, result);
     choices.append(button);
     return button;
   });

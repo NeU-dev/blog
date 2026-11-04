@@ -3,6 +3,7 @@ import BaseLayout from './BaseLayout.astro';
 import { PostHeader } from '../components/PostHeader';
 import { PostFooter } from '../components/PostFooter';
 import { ArticleReactions } from '../components/ArticleReactions';
+import { postTransitionName } from '../lib/view-transition';
 
 interface Props {
   title: string;
@@ -22,6 +23,7 @@ const site = Astro.site ?? new URL('https://neu-dev.net');
 const canonicalUrl = new URL(`/${category}/${slug}/`, site).href;
 const imageUrl = coverImage ? new URL(coverImage, site).href : undefined;
 const categoryName = category === 'tech' ? '技術記事' : '日記';
+const transitionName = postTransitionName(`/${category}/${slug}/`);
 const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -97,15 +99,18 @@ const formattedDate = pubDate.toLocaleDateString('ja-JP', {
 >
   <div class="read-progress" aria-hidden="true"><i></i></div>
   <div class="post-page">
-    <PostHeader
-      client:load
-      title={title}
-      category={category}
-      date={formattedDate}
-      tags={tags}
-      slug={reactionSlug}
-      coverImage={coverImage}
-    />
+    <div class="paper">
+      <PostHeader
+        client:load
+        title={title}
+        category={category}
+        date={formattedDate}
+        tags={tags}
+        slug={reactionSlug}
+        coverImage={coverImage}
+        transitionName={transitionName}
+      />
+    </div>
 
     <div class="article-shell container">
       <article class="article-body" data-article-slug={`${category}/${reactionSlug}`}>
@@ -147,12 +152,12 @@ const formattedDate = pubDate.toLocaleDateString('ja-JP', {
         startOnLoad: false,
         theme: 'base',
         themeVariables: {
-          fontFamily: 'Geist, "Noto Sans JP", sans-serif',
-          primaryColor: '#8ecdf5',
-          primaryTextColor: '#2a2d32',
-          primaryBorderColor: '#2a2d32',
-          lineColor: '#2a2d32',
-          secondaryColor: '#a3e6d8',
+          fontFamily: '"IBM Plex Sans JP", sans-serif',
+          primaryColor: '#dbe4ff',
+          primaryTextColor: '#1a2332',
+          primaryBorderColor: '#2443c4',
+          lineColor: '#3e4a5c',
+          secondaryColor: '#edf1f6',
           tertiaryColor: '#ffffff'
         }
       });

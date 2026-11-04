@@ -1,16 +1,16 @@
 /* ミッション・ファインダー（記事に埋め込むツール）。
-   記事内アンケート（.article-poll）と同じ、チャコールのパネル＋太い枠＋ずらした影の見た目にそろえる。
-   選んだ答えとミッションには、記事の強調と同じミスト色のマーカーを引く。
+   紙の上に置いた紺色のパネル。印の色は site.css の旧トークン（--mist など）を青系にして使う。
+   選んだ答えとミッションには、淡い青のマーカーを引く。
    このファイルは、ツールのある記事でだけ読み込まれる。 */
 
 .mf {
-  --mf-bg: #2a2d32;
-  --mf-card: #353940;
-  --mf-ink: #f1f3f5;
-  --mf-ink-2: #c5cad1;
-  --mf-muted: #a0a6af;
-  --mf-line: #474b52;
-  --mf-marker: rgb(142 205 245 / .58);
+  --mf-bg: #182233;
+  --mf-card: #212d42;
+  --mf-ink: #eef2f7;
+  --mf-ink-2: #c3ccd8;
+  --mf-muted: #96a1b2;
+  --mf-line: #34425a;
+  --mf-marker: rgb(141 166 255 / .4);
   /* 動機コードの色（チャコールの上で読める明るさ） */
   --mf-k1: #f4a6c8;
   --mf-k2: #7b93ff;
@@ -22,11 +22,9 @@
 
   position: relative;
   padding: clamp(20px, 3.4vw, 32px);
-  border: 3px solid var(--ink);
   border-radius: var(--radius-lg);
   background: var(--mf-bg);
   color: var(--mf-ink);
-  box-shadow: 8px 8px 0 var(--lilac);
   font-size: 16px;
   line-height: 1.75;
   scroll-margin-top: 96px;

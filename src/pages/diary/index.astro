@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getCollection } from 'astro:content';
-import { PostCard } from '../../components/PostCard';
+import PostList from '../../components/PostList.astro';
 const posts = (await getCollection('diary', ({ data }) => !data.draft)).sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 const site = Astro.site ?? new URL('https://neu-dev.net');
 const pageUrl = new URL('/diary/', site).href;
@@ -36,13 +36,14 @@ const structuredData = {
 };
 ---
 <BaseLayout title="日記・分析記事一覧" currentPage="diary" description={description} structuredData={structuredData}>
-  <section class="page-head container">
-    <p class="eyebrow">Archive / Diary · {String(posts.length).padStart(2, '0')}</p>
-    <h1>日々の<mark>寄り道</mark></h1>
-    <p>日々の出来事と、何気ない発見。気になったことは、データや計算でちょっと掘り下げてみます。</p>
-    <nav class="filters" aria-label="記事の種類"><a href="/">すべて</a><a href="/tech/">技術</a><a class="is-active" aria-current="page" href="/diary/">日記 <sup>{posts.length}</sup></a></nav>
+  <section class="paper">
+    <div class="page-head container">
+      <h1>日々の寄り道</h1>
+      <p>日々の出来事と、何気ない発見。気になったことは、データや計算でちょっと掘り下げてみます。</p>
+      <nav class="filters" aria-label="記事の種類"><a href="/">すべて</a><a href="/tech/">技術</a><a class="is-active" aria-current="page" href="/diary/">日記</a></nav>
+    </div>
   </section>
   <section class="section section--tight container">
-    <div class="post-grid">{posts.map((post, index) => <div class:list={['post-slot', { 'post-slot--featured': index === 0 }]} data-reveal style={`--rv-i:${index === 0 ? 0 : index % 3};--rv-r:${index % 2 ? 2 : -2}deg`}><PostCard client:visible title={post.data.title} excerpt={post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : '')} date={post.data.pubDate.toLocaleDateString('ja-JP')} category="diary" slug={post.data.permalink || post.slug} reactionSlug={post.slug} collection="diary" coverImage={post.data.coverImage} index={index} featured={index === 0} /></div>)}</div>
+    <PostList ruled headingLevel={2} posts={posts.map(post => ({ title: post.data.title, category: 'diary' as const, href: `/diary/${post.data.permalink || post.slug}/`, description: post.data.description || (post.data.mood ? `今日の気分: ${post.data.mood}` : ''), coverImage: post.data.coverImage, pubDate: post.data.pubDate }))} />
   </section>
 </BaseLayout>

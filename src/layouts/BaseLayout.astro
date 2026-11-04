@@ -54,9 +54,9 @@ const structuredDataJson = structuredData
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700;800;900&family=Press+Start+2P&family=DotGothic16&display=swap" />
-    <meta name="theme-color" content="#f1f3f5" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#1a1c20" media="(prefers-color-scheme: dark)" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=Klee+One:wght@600&family=Press+Start+2P&family=DotGothic16&display=swap" />
+    <meta name="theme-color" content="#f7f9fb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111722" media="(prefers-color-scheme: dark)" />
     <script is:inline>
       (() => {
         const root = document.documentElement;
@@ -64,9 +64,13 @@ const structuredDataJson = structuredData
           const savedTheme = localStorage.getItem('neulog-theme');
           if (savedTheme === 'light' || savedTheme === 'dark') root.dataset.theme = savedTheme;
         } catch {}
-        // Scroll-reveal hides content until the effects script runs; never leave it hidden.
-        root.classList.add('fx');
-        setTimeout(() => { if (!root.dataset.fxReady) root.classList.remove('fx'); }, 3000);
+        // 動きは「動きを減らす」設定がオフのときだけ。スクリプトが動かなかったときに隠したままにしない。
+        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          root.classList.add('motion');
+          setTimeout(() => { if (!root.dataset.motionReady) root.classList.remove('motion'); }, 3000);
+        }
+        // ページ移動のアニメーションで着いたときは、飛んできた題名と画像を隠さない
+        addEventListener('pagereveal', event => { if (event.viewTransition) root.classList.add('vt-arrived'); });
       })();
     </script>
     <meta property="og:locale" content="ja_JP" />
@@ -107,34 +111,43 @@ const structuredDataJson = structuredData
     <Footer />
     <GameLauncher client:load showButton={false} />
     <script>
-      import { initFx } from '../lib/fx';
-      document.documentElement.dataset.fxReady = '1';
-      initFx();
+      import { initReadProgress } from '../lib/read-progress';
+      import { initMotion } from '../lib/motion';
+      import { initCursor } from '../lib/cursor';
+      initReadProgress();
+      initMotion();
+      initCursor();
 
       document.querySelectorAll('[data-open-game]').forEach(button => {
         button.addEventListener('click', () => window.dispatchEvent(new Event('open-neulog-game')));
       });
-      const quests = ['今日は知らないAPIを1つ触る。', '失敗したコードを1つメモに残す。', '眠っているアイデアを10分だけ動くものにする。', 'READMEを未来の自分向けに1行直す。'];
-      document.querySelector('[data-side-quest]')?.addEventListener('click', () => {
-        const target = document.querySelector('[data-side-quest-message]');
-        if (target) target.textContent = `今日のおまけ：${quests[Math.floor(Math.random() * quests.length)]}`;
-      });
-
       const root = document.documentElement;
       const prefersDark = matchMedia('(prefers-color-scheme: dark)');
-      document.querySelectorAll('[data-theme-toggle]').forEach(button => {
+      document.querySelectorAll<HTMLElement>('[data-theme-toggle]').forEach(button => {
         button.addEventListener('click', () => {
           const current = root.dataset.theme ?? (prefersDark.matches ? 'dark' : 'light');
           const next = current === 'dark' ? 'light' : 'dark';
-          root.dataset.theme = next;
-          try { localStorage.setItem('neulog-theme', next); } catch {}
+          const apply = () => {
+            root.dataset.theme = next;
+            try { localStorage.setItem('neulog-theme', next); } catch {}
+          };
+          if (!document.startViewTransition || !root.classList.contains('motion')) { apply(); return; }
+          // 押したボタンから円が広がって、新しい色に塗り替わる
+          const box = button.getBoundingClientRect();
+          const x = box.left + box.width / 2;
+          const y = box.top + box.height / 2;
+          const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+          root.classList.add('theme-vt');
+          const transition = document.startViewTransition(apply);
+          transition.ready.then(() => {
+            root.animate(
+              { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+              { duration: 800, easing: 'cubic-bezier(.65, 0, .35, 1)', pseudoElement: '::view-transition-new(root)' },
+            );
+          });
+          transition.finished.finally(() => root.classList.remove('theme-vt'));
         });
       });
-
-      const header = document.querySelector('.site-header');
-      const markScrolled = () => header?.classList.toggle('is-scrolled', scrollY > 8);
-      markScrolled();
-      addEventListener('scroll', markScrolled, { passive: true });
     </script>
   </body>
 </html>

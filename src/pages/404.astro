@@ -7,14 +7,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   description="お探しのページは移動または削除された可能性があります。NeULOGのホームや記事一覧からお探しください。"
   noIndex
 >
-  <section class="page-head container">
-    <p class="eyebrow">Error / 404</p>
-    <h1>ページが<br /><mark>見つかりません</mark></h1>
-    <p>URLを確認するか、ホームや記事一覧からお探しください。</p>
-    <div class="hero__actions">
-      <a class="btn btn--primary" href="/">ホームへ戻る</a>
-      <a class="btn btn--ghost" href="/tech/">技術記事</a>
-      <a class="btn btn--ghost" href="/diary/">日記・分析</a>
+  <section class="paper">
+    <div class="page-head container">
+      <h1>ページが見つかりません</h1>
+      <p>URLを確認するか、ホームや記事一覧からお探しください。</p>
+      <div class="page-head__actions">
+        <a class="btn" href="/">ホームへ戻る</a>
+        <a class="btn btn--ghost" href="/tech/">技術の記事</a>
+        <a class="btn btn--ghost" href="/diary/">日記の記事</a>
+      </div>
     </div>
   </section>
 </BaseLayout>

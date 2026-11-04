@@ -10,6 +10,8 @@ export function createBreakoutAutoplay() {
   };
   const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
   let trailClock = 0;
+  // 人が動かしているときのパドルの目標位置。null のあいだは自動で打ち返す。
+  let manualTarget = null;
   function reflectX(x) {
     const low = field.left + state.ball.r;
     const span = field.right - state.ball.r - low;
@@ -80,6 +82,7 @@ export function createBreakoutAutoplay() {
         : .28;
       goal = landing - angle / 1.05 * p.width / 2;
     }
+    if (manualTarget !== null) goal = manualTarget;
     goal = clampValue(goal, field.left + p.width / 2, field.right - p.width / 2);
     p.x += clampValue(goal - p.x, -620 * dt, 620 * dt);
     const previousX = b.x, previousY = b.y;
@@ -168,6 +171,9 @@ export function createBreakoutAutoplay() {
       remaining -= step;
     }
   }
+  function setTarget(x) {
+    manualTarget = Number.isFinite(x) ? x : null;
+  }
   seedBricks();
-  return { state, advance, reset };
+  return { state, advance, reset, setTarget, field };
 }

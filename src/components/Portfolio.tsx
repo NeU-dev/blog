@@ -40,23 +40,25 @@ export function Portfolio({ className = '' }: { className?: string }) {
   return (
     <section id="portfolio" className={`section portfolio ${className}`} aria-labelledby="portfolio-title">
       <div className="section-head">
-        <div><p className="eyebrow">Portfolio</p><h2 id="portfolio-title" className="section-title"><span>制作した</span><wbr /><span>アプリ・サービス</span></h2></div>
+        <h2 id="portfolio-title" className="section-title">つくったアプリ</h2>
       </div>
       <div className="portfolio-grid">
         {projects.map(project => (
-          <article className="portfolio-card" key={project.name}>
-            <div className="portfolio-card__top">
-              <img src={project.image} alt="" width={80} height={80} loading="lazy" decoding="async" />
-              <span className="portfolio-card__status" data-stage={project.stage}>{project.status}</span>
+          <article className="portfolio-item" key={project.name}>
+            <div className="portfolio-item__top">
+              <img src={project.image} alt="" width={56} height={56} loading="lazy" decoding="async" />
+              <div>
+                <h3>{project.name}</h3>
+                <p className="portfolio-item__category">{project.category}</p>
+              </div>
             </div>
-            <p className="portfolio-card__category">{project.category}</p>
-            <h3>{project.name}</h3>
-            <p className="portfolio-card__description">{project.description}</p>
-            <ul className="portfolio-card__features" aria-label={`${project.name}の特徴`}>
+            <span className="portfolio-item__status" data-stage={project.stage}>{project.status}</span>
+            <p className="portfolio-item__description">{project.description}</p>
+            <ul className="portfolio-item__features" aria-label={`${project.name}の特徴`}>
               {project.features.map(feature => <li key={feature}>{feature}</li>)}
             </ul>
-            <a className="portfolio-card__link" href={project.href} target="_blank" rel="noopener noreferrer" aria-label={`${project.name}：${project.linkLabel}（新しいタブ）`}>
-              {project.linkLabel}<span aria-hidden="true">↗</span>
+            <a className="portfolio-item__link text-link" href={project.href} target="_blank" rel="noopener noreferrer" aria-label={`${project.name}：${project.linkLabel}（新しいタブ）`}>
+              {project.linkLabel} <span aria-hidden="true">↗</span>
             </a>
           </article>
         ))}

@@ -28,16 +28,16 @@ export function Leaderboard() {
   const gap = topScore && personalBest ? Math.max(0, topScore - personalBest) : null;
 
   return <div className="leaderboard">
-    <div className="leaderboard__head"><h3>ブロック崩しランキング</h3><span>TOP 10 · 1面勝負</span></div>
+    <div className="leaderboard__head"><h3>ブロック崩しランキング</h3><span>上位10人</span></div>
     {visibleScores.length ? <ol className="leaderboard__list">{visibleScores.map((row, i) => {
       const leaderGap = Math.max(0, topScore - row.score);
       const meter = topScore ? Math.max(8, (row.score / topScore) * 100) : 0;
-      return <li className={`leaderboard__row leaderboard__row--${Math.min(i + 1, 4)}`} key={`${row.player_name}-${i}`}>
-        <span className="leaderboard__rank">{i === 0 ? '♛' : String(i + 1).padStart(2, '0')}</span>
+      return <li className={`leaderboard__row leaderboard__row--${Math.min(i + 1, 4)}`} key={`${row.player_name}-${i}`} style={{ '--n': i } as React.CSSProperties}>
+        <span className="leaderboard__rank">{i + 1}</span>
         <span className="leaderboard__player"><b>{row.player_name}</b><small>{i === 0 ? 'トップを防衛中' : `首位差 ${leaderGap.toLocaleString()}`}</small></span>
         <span className="leaderboard__score"><em>{row.score.toLocaleString()}</em><i><u style={{ width: `${meter}%` }} /></i></span>
       </li>;
-    })}</ol> : <p className="leaderboard__empty">{offline ? 'ランキングを読み込めませんでした' : '最初のプレイヤーになろう'}</p>}
+    })}</ol> : <p className="leaderboard__empty">{offline ? 'ランキングを読み込めませんでした。時間をおいて開き直してください。' : '最初のプレイヤーになろう'}</p>}
     <div className="leaderboard__me">
       <span>あなたの端末ベスト</span>
       <b>{personalBest ? personalBest.toLocaleString() : '—'}</b>
@@ -48,6 +48,6 @@ export function Leaderboard() {
       <li>連続破壊 <b>最大 ×4</b></li>
       <li>速攻・残機 <b>クリア加点</b></li>
     </ul>
-    {offline && <small>オフライン中 / ブログとゲームはそのまま楽しめます</small>}
+    {offline && <small>ゲームはこのまま遊べます。</small>}
   </div>;
 }

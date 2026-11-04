@@ -1,10 +1,11 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
 @import "./site.css";
+@import "./motion.css";
 
 /* Tailwind tokens are only used by the arcade game overlay (RetroGame). */
 @theme {
-  --font-sans: 'Geist', 'Noto Sans JP', sans-serif;
+  --font-sans: 'IBM Plex Sans JP', sans-serif;
   --font-display: 'Press Start 2P', 'Courier New', monospace;
   --font-jp-game: 'DotGothic16', 'Press Start 2P', monospace;
 

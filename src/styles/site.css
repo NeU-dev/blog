@@ -173,6 +173,9 @@ img { max-width: 100%; height: auto; }
 .post-entry__excerpt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.9; }
 .post-entry__media { display: block; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 6px; background: var(--paper-2); }
 .post-entry__media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* 画像のない一覧。説明は省かずに全部見せる */
+.post-list--plain .post-entry { grid-template-columns: 7.5rem minmax(0, 1fr); }
+.post-list--plain .post-entry__excerpt { display: block; max-width: 44em; overflow: visible; }
 .empty-state { padding: 48px 0; color: var(--muted); }
 .empty-state b { display: block; color: var(--ink); }
 
@@ -354,6 +357,8 @@ img { max-width: 100%; height: auto; }
 .skill-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
 .skill-list li { padding: 11px 0; border-bottom: 1px solid var(--rule); font-size: 15px; font-weight: 600; }
 .portfolio--about { padding-top: 0; }
+.claude-work { padding-top: 0; scroll-margin-top: 80px; }
+.claude-work__lead { max-width: 40em; margin: 24px 0 4px; font-size: 16px; line-height: 2.05; }
 
 /* ---------- footer ---------- */
 .site-footer { margin-top: auto; border-top: 1px solid var(--rule); }
@@ -408,6 +413,7 @@ img { max-width: 100%; height: auto; }
   .post-entry__media { grid-column: 2; grid-row: 2; margin-top: 4px; border-radius: 4px; }
   .post-entry__title { font-size: 17px; }
   .post-entry__excerpt { font-size: 13px; }
+  .post-list--plain .post-entry { grid-template-columns: minmax(0, 1fr); }
   .about-hero { grid-template-columns: minmax(0, 1fr); }
   .site-footer__inner { grid-template-columns: minmax(0, 1fr); }
   .article-body { font-size: 16px; }

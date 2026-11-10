@@ -1,0 +1,84 @@
+---
+// プロフィールの「Claudeとつくる」。Claudeとつくったものと、つくり方の記事を、記事の一覧と同じノートの目次の形で並べる。
+// 記事は、タグが「Claude」で始まるもの（Claude Code など）を新しい順に自動で載せる。
+import { getCollection } from 'astro:content';
+import { postTransitionName } from '../lib/view-transition';
+
+interface Row {
+  label: string;
+  title: string;
+  href: string;
+  text: string;
+  // カーソルに出す言葉
+  cursor: string;
+  date?: Date;
+  // 新しいタブで開く、外のサイト
+  external?: boolean;
+  // リンクの読み上げに足す言葉
+  hint?: string;
+  // 記事ページへ移るとき、題名がそのまま記事の見出しへ飛んでいく
+  morph?: boolean;
+}
+
+const techPosts = await getCollection('tech', ({ data }) => !data.draft);
+const postHref = (post: (typeof techPosts)[number]) => `/tech/${post.slug}/`;
+// ミッション・ファインダーは記事に埋め込んであるので、置いてある記事へ案内する
+const missionPost = techPosts.find(post => post.body?.includes('::mission-finder'));
+const guides = techPosts
+  .filter(post => post !== missionPost && post.data.tags.some(tag => tag.toLowerCase().startsWith('claude')))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+
+const rows: Row[] = [
+  ...guides.map(post => ({ label: '記事', title: post.data.title, href: postHref(post), text: post.data.description || '', cursor: '読む', date: post.data.pubDate, morph: true })),
+  ...(missionPost ? [{
+    label: 'ツール',
+    title: 'ミッション・ファインダー',
+    href: postHref(missionPost),
+    text: '好きなことと嫌いなことを掘り下げて、自分のミッションの下書きをつくるツールです。問いの言い換えと文章の読み取りにClaude APIを使っています。AIが引いた言葉は本人の文章にあるものだけを残し、つらい状況が読み取れたときは先に相談先を出します。',
+    cursor: '使ってみる',
+  }] : []),
+  {
+    label: 'サイト',
+    title: 'このブログ（NeULOG）',
+    href: 'https://github.com/NeU-dev/blog',
+    text: 'Astroでつくったブログです。最初の立ち上げから、ノート風のデザインへのつくり直し、公開の自動化まで、Claude Codeと進めています。ソースはGitHubで公開しています。',
+    cursor: 'コードを見る',
+    external: true,
+    hint: '（GitHubを新しいタブで開きます）',
+  },
+  {
+    label: 'これから',
+    title: '愛知で、Claude Codeを一緒に触る場をつくりたい',
+    href: 'mailto:yukak367@gmail.com',
+    text: '始め方で迷っている方も、一緒に何かつくってみたい方も、メールで声をかけてください。',
+    cursor: 'メールする',
+    hint: '（メールを書きます）',
+  },
+];
+---
+
+<section id="claude" class="section claude-work" aria-labelledby="claude-title">
+  <div class="section-head">
+    <h2 id="claude-title" class="section-title">Claudeとつくる</h2>
+  </div>
+  <p class="claude-work__lead">このブログも、App Storeに出しているStamplyも、Claude Codeと一緒につくりました。つくり方は、初めての人が同じ手順で進められるように、プロンプトごと記事にしています。</p>
+  <ul class="post-list post-list--plain">
+    {rows.map(row => {
+      const name = row.morph ? postTransitionName(row.href) : undefined;
+      return (
+      <li class="post-entry" data-cursor={row.cursor}>
+        <div class="post-entry__margin">
+          {row.date && <time datetime={row.date.toISOString()}>{row.date.toLocaleDateString('ja-JP').replaceAll('/', '.')}</time>}
+          <span class="post-entry__cat">{row.label}</span>
+        </div>
+        <div class="post-entry__body">
+          <h3 class="post-entry__title" style={name ? `view-transition-name: t-${name}; view-transition-class: post-morph` : undefined}>
+            <a href={row.href} target={row.external ? '_blank' : undefined} rel={row.external ? 'noopener noreferrer' : undefined}>{row.title}{row.external && <span class="post-entry__ext" aria-hidden="true">↗</span>}{row.hint && <span class="sr-only">{row.hint}</span>}</a>
+          </h3>
+          <p class="post-entry__excerpt">{row.text}</p>
+        </div>
+      </li>
+      );
+    })}
+  </ul>
+</section>

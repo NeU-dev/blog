@@ -18,7 +18,7 @@ const allPosts: PostEntry[] = [
 const titleLines = ['つくりながら', '考えたことの記録。'];
 
 const site = Astro.site ?? new URL('https://neu-dev.net');
-const homeDescription = 'アプリやWebサービスの企画・設計・運営に取り組むNeUのブログ。プロダクトづくりの中で考えたことや判断したこと、AIの活用について書いています。';
+const homeDescription = '愛知で、Claude Codeと一緒にアプリやWebサービスをつくっているNeUのブログ。つくる中で判断したことや、初めての人でも同じように進められるつくり方を書いています。';
 const homeStructuredData = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -37,7 +37,7 @@ const homeStructuredData = {
       '@id': new URL('/#person', site).href,
       name: 'NeU',
       url: new URL('/about/', site).href,
-      knowsAbout: ['プロダクト企画', '課題整理', '機能・体験設計', 'AIの活用', 'サービス運営', '改善・検証'],
+      knowsAbout: ['プロダクト企画', '課題整理', '機能・体験設計', 'Claude Code', 'AIの活用', 'サービス運営', '改善・検証'],
     },
   ],
 };
@@ -54,10 +54,11 @@ const homeStructuredData = {
     <div class="container hero__inner">
       <div class="hero__copy">
         <h1 class="hero__title">{titleLines.map((line, i) => <span class="hero__line" style={`--i:${i}`}><span class="ink-line">{line}</span></span>)}</h1>
-        <p class="hero__lead">アプリやWebサービスの企画・設計・運営をしているNeUのブログです。プロダクトづくりで判断したことや、AIの使い方について書いています。</p>
+        <p class="hero__lead">愛知で、Claude Codeと一緒にアプリやWebサービスをつくっているNeUのブログです。つくる中で判断したことや、初めての人でも同じように進められるつくり方を書いています。</p>
         <div class="hero__links">
           <a href="/about/" class="hero__author text-link"><img src="/icon.JPG" alt="" width="72" height="72" />書いている人</a>
           <a href="#portfolio" class="text-link">つくったアプリ</a>
+          <a href="/about/#claude" class="text-link">Claudeとつくる</a>
         </div>
       </div>
       <div class="hero-play" data-hero-play>

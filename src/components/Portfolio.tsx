@@ -26,13 +26,13 @@ const projects = [
   {
     name: 'だーつめいと',
     category: 'ダーツ・交流',
-    status: '事前登録受付中',
+    status: 'App Store公開中',
     image: '/images/portfolio/dartmate.webp',
-    description: '近くの募集を探して、一緒にダーツを投げる相手とつながるサービス。募集への参加から、また一緒に遊ぶまでの流れを設計しています。',
+    description: '近くの募集を探して、一緒にダーツを投げる相手とつながるアプリ。募集への参加から、また一緒に遊ぶまでの流れを設計しています。',
     features: ['近くの募集を探す', '参加・フレンド機能'],
-    href: 'https://dartmate.net/',
-    linkLabel: 'サービスを見る',
-    stage: 'preregistration',
+    href: 'https://apps.apple.com/jp/app/id6819547245',
+    linkLabel: 'App Storeで見る',
+    stage: 'released',
   },
 ];
 

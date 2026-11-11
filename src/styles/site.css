@@ -67,14 +67,16 @@
 
 /* ---------- base ---------- */
 html { scroll-behavior: smooth; scroll-padding-top: 80px; -webkit-text-size-adjust: 100%; }
-body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; color: var(--ink); background: var(--paper); font-family: var(--font); font-size: 16px; line-height: 1.8; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+/* 和文の組み方（対応ブラウザのみ）：和文と英数字のあいだを少しあけ、行頭の括弧は詰め、小さい「っ」や「ー」で行を始めない */
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; color: var(--ink); background: var(--paper); font-family: var(--font); font-size: 16px; line-height: 1.8; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; text-autospace: normal; text-spacing-trim: trim-start; line-break: strict; }
+:is(pre, code, kbd, samp, [role="dialog"]) { text-autospace: no-autospace; text-spacing-trim: space-all; }
 main { flex: 1; }
 a { color: inherit; text-decoration: none; }
 button { cursor: pointer; font: inherit; color: inherit; background: none; border: 0; padding: 0; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:disabled { cursor: default; }
 img { max-width: 100%; height: auto; }
-::selection { background: var(--highlight); color: var(--ink); }
+::selection, ::target-text { background: var(--highlight); color: var(--ink); }
 :is(a, button, input, [tabindex]):focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
 [hidden] { display: none !important; }
 /* 日本語の見出しや短い文は、文節の途中で折り返さない（対応ブラウザのみ） */
@@ -185,6 +187,10 @@ img { max-width: 100%; height: auto; }
 .portfolio-item { display: flex; flex-direction: column; min-width: 0; padding-top: 28px; }
 .portfolio-item__top { display: flex; align-items: center; gap: 14px; }
 .portfolio-item__top img { flex: none; width: 56px; height: 56px; object-fit: contain; border-radius: 13px; }
+/* アプリのアイコンは、角のつながりがなめらかな形に（対応ブラウザのみ） */
+@supports (corner-shape: squircle) {
+  .portfolio-item__top img { border-radius: 40%; corner-shape: squircle; }
+}
 .portfolio-item h3 { margin: 0; font-size: 19px; font-weight: 700; line-height: 1.5; font-feature-settings: "palt"; }
 .portfolio-item__category { margin: 0; color: var(--muted); font-size: 13px; }
 .portfolio-item__status { align-self: flex-start; margin-top: 18px; padding: 2px 10px; border: 1px solid var(--rule); border-radius: 999px; color: var(--ink-2); font-size: 12px; font-weight: 600; }
@@ -252,9 +258,32 @@ img { max-width: 100%; height: auto; }
 .post-cover img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--radius-lg); }
 .article-shell { max-width: calc(var(--measure) + var(--gutter) * 2); margin: clamp(40px, 6vw, 72px) auto clamp(64px, 8vw, 104px); }
 
+/* 目次。狭い画面では本文の前に畳んで置き、広い画面では本文の右の余白に付いてくる（印は lib/toc.ts が動かす） */
+.toc-fold { margin-bottom: clamp(28px, 5vw, 40px); border-block: 1px solid var(--rule); }
+.toc-fold summary { display: flex; align-items: center; justify-content: space-between; min-height: 54px; cursor: pointer; list-style: none; font-family: var(--font-hand); font-size: 17px; font-weight: 600; }
+.toc-fold summary::-webkit-details-marker { display: none; }
+.toc-fold summary::after { content: ''; width: 8px; height: 8px; margin-right: 6px; border: solid var(--blue); border-width: 0 2px 2px 0; rotate: 45deg; translate: 0 -2px; }
+.toc-fold[open] summary::after { rotate: 225deg; translate: 0 2px; }
+.toc-fold ol { margin: 0 0 16px; padding: 0; list-style: none; border-left: 1px solid var(--rule); }
+.toc-fold a { display: block; padding: 9px 0 9px 16px; color: var(--ink-2); font-size: 15px; line-height: 1.6; }
+.toc-rail { display: none; }
+.toc-rail__title { margin: 0 0 10px; color: var(--ink-2); font-family: var(--font-hand); font-size: 15px; font-weight: 600; line-height: 1.6; }
+.toc-rail ol { position: relative; margin: 0; padding: 0; list-style: none; border-left: 1px solid var(--rule); }
+.toc-rail ol::before { content: ''; position: absolute; top: 0; left: -1.5px; width: 2px; height: var(--toc-h, 0px); translate: 0 var(--toc-y, 0px); border-radius: 2px; background: var(--blue); }
+.toc-rail a { display: block; padding: 6px 0 6px 14px; color: var(--muted); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; transition: color .15s; }
+.toc-rail a:hover, .toc-rail a[aria-current] { color: var(--ink); }
+@media (min-width: 1200px) {
+  .article-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--measure) + var(--gutter) * 2)) minmax(0, 1fr); }
+  .article-layout > .article-shell { grid-column: 2; }
+  .toc-rail { display: block; grid-column: 3; align-self: start; position: sticky; top: 96px; max-width: 200px; margin: 72px 0 0 12px; }
+  .toc-fold { display: none; }
+}
+
 .article-body { min-width: 0; color: var(--ink); font-size: 17px; line-height: 2; overflow-wrap: break-word; }
 .article-body > :first-child { margin-top: 0; }
 .article-body p { margin: 1.25em 0; }
+/* 段落の最後の行に、1〜2文字だけ残さない（対応ブラウザのみ） */
+.article-body :is(p, li) { text-wrap: pretty; }
 .article-body :is(h1, h2, h3, h4, h5, h6) { color: var(--ink); letter-spacing: .02em; font-feature-settings: "palt"; scroll-margin-top: 88px; }
 .article-body h1 { margin: 2.4em 0 .8em; font-size: 1.75rem; font-weight: 700; line-height: 1.5; }
 .article-body h2 { margin: 2.8em 0 .9em; padding-top: 1em; border-top: 1px solid var(--ink); font-size: clamp(1.3rem, 2.4vw, 1.55rem); font-weight: 700; line-height: 1.55; }
@@ -341,7 +370,8 @@ img { max-width: 100%; height: auto; }
 .post-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--rule); }
 .post-end p { margin: 0; font-family: var(--font-hand); font-size: 19px; font-weight: 600; line-height: 1.6; }
 .post-end__thanks { display: flex; align-items: center; gap: 18px; }
-.read-stamp { display: grid; place-items: center; flex: none; width: 64px; height: 64px; border: 2px solid var(--blue); border-radius: 50%; color: var(--blue); font-family: var(--font-hand); font-size: 17px; font-weight: 600; rotate: -12deg; }
+.read-stamp { display: grid; place-items: center; flex: none; width: 64px; height: 64px; border: 2px solid var(--blue); border-radius: 50%; color: var(--blue); font-family: var(--font-hand); font-size: 17px; font-weight: 600; rotate: -12deg; filter: url(#stamp-ink); }
+.stamp-ink { position: absolute; }
 
 /* ---------- about ---------- */
 .about-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 24px 40px; padding-block: clamp(64px, 9vw, 112px) clamp(40px, 6vw, 72px); }

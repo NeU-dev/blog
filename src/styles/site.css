@@ -130,17 +130,22 @@ img { max-width: 100%; height: auto; }
 }
 
 /* ---------- hero ---------- */
-.hero__inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); align-items: center; gap: 48px; padding-block: clamp(64px, 9vw, 112px) clamp(48px, 6vw, 72px); }
-.hero__title { margin: 0; font-family: var(--font-hand); font-size: clamp(32px, 8.4vw, 58px); font-weight: 600; line-height: 1.34; letter-spacing: .01em; }
-.hero__line, .ink-line { display: block; }
-@media (min-width: 1024px) { .hero__title { font-size: min(58px, 5vw); } }
-.hero__lead { max-width: 34em; margin: 28px 0 0; color: var(--ink-2); font-size: clamp(15px, 1.4vw, 17px); line-height: 2; }
-.hero__links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; margin-top: 32px; font-size: 15px; }
+/* 題名を紙いっぱいに書き、その下に紹介文とブロック崩しを並べる */
+.hero__inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, min(600px, 66vh)); grid-template-areas: "title title" "copy play"; align-items: start; gap: clamp(28px, 4.5vh, 44px) 48px; padding-block: clamp(36px, 6vh, 80px) clamp(28px, 4.5vh, 56px); }
+.hero__title { grid-area: title; margin: 0; font-family: var(--font-hand); font-size: clamp(30px, min(9.6vw, 12.5vh), 104px); font-size: clamp(30px, min(9.6vw, 12.5svh), 104px); font-weight: 600; line-height: 1.22; }
+.hero__line { display: block; }
+/* 書いていく幅を文字の幅に合わせる（ペン先が行の終わりで止まるように） */
+.ink-line { display: inline-block; vertical-align: top; }
+.hero__copy { grid-area: copy; }
+.hero__lead { max-width: 34em; margin: 4px 0 0; color: var(--ink-2); font-size: clamp(15px, 1.4vw, 17px); line-height: 2; }
+.hero__links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; margin-top: 28px; font-size: 15px; }
 .hero__author { display: inline-flex; align-items: center; gap: 10px; }
 .hero__author img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+/* 広い画面では、紹介文の下にリンクを縦に並べる */
+@media (min-width: 1024px) { .hero__links { flex-direction: column; align-items: flex-start; gap: 14px; } }
 
 /* 方眼紙の上のブロック崩し（描画は lib/hero-breakout.ts） */
-.hero-play { min-width: 0; }
+.hero-play { grid-area: play; min-width: 0; }
 .hero-play__screen { display: block; width: 100%; border-radius: var(--radius-lg); }
 .hero-play__screen canvas { display: block; width: 100%; height: auto; aspect-ratio: 768 / 440; }
 .hero-play__hint { margin: 10px 0 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
@@ -420,8 +425,9 @@ img { max-width: 100%; height: auto; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1023px) {
-  .hero__inner { grid-template-columns: minmax(0, 1fr); gap: 40px; }
-  .hero-play { max-width: 560px; }
+  /* 狭い画面では、題名 → ブロック崩し → 紹介文の順に積む */
+  .hero__inner { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "play" "copy"; gap: 28px; }
+  .hero-play { max-width: 600px; }
 }
 @media (max-width: 960px) {
   .post-entry { grid-template-columns: 7.5rem minmax(0, 1fr) 136px; gap: 0 24px; }
@@ -436,7 +442,7 @@ img { max-width: 100%; height: auto; }
   .brand { font-size: 17px; }
   .site-nav a { padding: 6px; }
   .icon-button { width: 36px; height: 36px; }
-  .hero__inner { padding-top: 56px; }
+  .hero__inner { padding-top: 40px; }
   .post-list::before { display: none; }
   .post-entry { grid-template-columns: minmax(0, 1fr) 96px; gap: 6px 16px; padding: 22px 0; }
   .post-entry__margin { grid-column: 1 / -1; display: flex; gap: 12px; padding-top: 0; }

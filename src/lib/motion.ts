@@ -26,7 +26,10 @@ export function initMotion() {
   initReveal();
   initHeaderTuck();
   initInkNav();
-  if (finePointer()) initMagnetic();
+  if (finePointer()) {
+    initMagnetic();
+    initPaperLight();
+  }
 }
 
 // 同時に画面へ入ったものは、上・左にあるものから順に少しずつ遅らせて出す
@@ -119,4 +122,17 @@ function initMagnetic() {
       button.style.removeProperty('--my');
     });
   });
+}
+
+// トップの方眼は、カーソルのまわりだけ青く浮かび上がる
+function initPaperLight() {
+  const hero = document.querySelector<HTMLElement>('.hero');
+  if (!hero) return;
+  hero.addEventListener('pointermove', event => {
+    const box = hero.getBoundingClientRect();
+    hero.style.setProperty('--px', `${event.clientX - box.left}px`);
+    hero.style.setProperty('--py', `${event.clientY - box.top}px`);
+    hero.classList.add('is-lit');
+  });
+  hero.addEventListener('pointerleave', () => hero.classList.remove('is-lit'));
 }

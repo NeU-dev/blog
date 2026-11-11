@@ -52,8 +52,8 @@ const homeStructuredData = {
 >
   <section class="hero paper" aria-label="NeUのブログ紹介">
     <div class="container hero__inner">
+      <h1 class="hero__title">{titleLines.map(line => <span class="hero__line"><span class="ink-line">{line}</span></span>)}</h1>
       <div class="hero__copy">
-        <h1 class="hero__title">{titleLines.map((line, i) => <span class="hero__line" style={`--i:${i}`}><span class="ink-line">{line}</span></span>)}</h1>
         <p class="hero__lead">愛知で、Claude Codeと一緒にアプリやWebサービスをつくっているNeUのブログです。つくる中で判断したことや、初めての人でも同じように進められるつくり方を書いています。</p>
         <div class="hero__links">
           <a href="/about/" class="hero__author text-link"><img src="/icon.JPG" alt="" width="72" height="72" />書いている人</a>
@@ -98,6 +98,12 @@ const homeStructuredData = {
 
 <script>
   import { mountHeroBreakout } from '../lib/hero-breakout';
+  import { mountHeroPen } from '../lib/hero-pen';
   const play = document.querySelector<HTMLElement>('[data-hero-play]');
-  if (play) mountHeroBreakout(play);
+  const hero = play?.closest<HTMLElement>('.hero');
+  if (play && hero) {
+    // 題名を書き終えたペン先が、ブロック崩しの球になる
+    const game = mountHeroBreakout(play, { waitForPen: true });
+    mountHeroPen(hero, game);
+  }
 </script>

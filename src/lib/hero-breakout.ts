@@ -3,6 +3,7 @@ import { createBreakoutAutoplay } from './breakout-autoplay';
 // トップの方眼紙の上で、ブロック崩しが勝手に遊び続ける。
 // カーソルを乗せるとパドルを動かせて、クリックすると本番のゲーム（GameLauncher）が開く。
 // 盤面の計算は breakout-autoplay.js、ここは「青インクで描く」ことと演出だけを受け持つ。
+// 開いた直後は球を出さずに待ち、題名を書き終えたペン先（lib/hero-pen.ts）がパドルに届いたら、それを球にして始める。
 
 const W = 768;
 const H = 440;
@@ -38,12 +39,24 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   else ctx.rect(x, y, w, h);
 }
 
-/** トップのブロック崩しを動かし始める。止めるための関数を返す。 */
-export function mountHeroBreakout(root: HTMLElement) {
+export type HeroBreakout = {
+  /** 止める */
+  stop: () => void;
+  /** ペン先が届いた。パドルの上に球を置いて、ゲームを始める。 */
+  launch: () => void;
+  /** 球が置かれる場所（画面上の座標）と、球の直径 */
+  landing: () => { x: number; y: number; size: number };
+};
+
+// ペン先がいつまでも来ないときに、待つのをやめるまでの秒数
+const PEN_TIMEOUT = 6;
+
+/** トップのブロック崩しを動かし始める。waitForPen のときは、launch が呼ばれるまで球を出さない。 */
+export function mountHeroBreakout(root: HTMLElement, { waitForPen = false } = {}): HeroBreakout {
   const screen = root.querySelector<HTMLElement>('.hero-play__screen');
   const canvas = root.querySelector<HTMLCanvasElement>('canvas');
   const ctx = canvas?.getContext('2d');
-  if (!screen || !canvas || !ctx) return () => {};
+  if (!screen || !canvas || !ctx) return { stop() {}, launch() {}, landing: () => ({ x: 0, y: 0, size: 0 }) };
 
   const demo = createBreakoutAutoplay();
   const state = demo.state as unknown as DemoState;
@@ -62,6 +75,8 @@ export function mountHeroBreakout(root: HTMLElement) {
   let squash = 0;
   let scorePop = 0;
   let clearAt = -1;
+  let waiting = waitForPen && !reducedMotion.matches;
+  let landedAt = -1;
   let seenScore = 0;
   let seenPaddleHits = 0;
   let wasAlive = state.bricks.map(brick => brick.alive);
@@ -93,9 +108,26 @@ export function mountHeroBreakout(root: HTMLElement) {
     shake = 1;
   };
 
+  const launch = () => {
+    if (!waiting) return;
+    waiting = false;
+    state.ball.x = state.paddle.x;
+    state.ball.y = state.paddle.y - state.ball.r - 1;
+    holdUntil = clock;
+    landedAt = clock;
+    squash = 1;
+    trail.length = 0;
+  };
+  const landing = () => {
+    const box = canvas.getBoundingClientRect();
+    const scale = box.width / W;
+    return { x: box.left + state.paddle.x * scale, y: box.top + (state.paddle.y - state.ball.r - 1) * scale, size: (state.ball.r + 1) * 2 * scale };
+  };
+
   const step = (dt: number) => {
     clock += dt;
-    if (clock >= holdUntil) demo.advance(dt);
+    if (waiting && clock > PEN_TIMEOUT) launch();
+    if (!waiting && clock >= holdUntil) demo.advance(dt);
 
     state.bricks.forEach((brick, index) => {
       if (wasAlive[index] && !brick.alive) breakBrick(index);
@@ -128,7 +160,7 @@ export function mountHeroBreakout(root: HTMLElement) {
 
     trail.push({ x: state.ball.x, y: state.ball.y });
     if (trail.length > 14) trail.shift();
-    if (state.phase !== 'play') trail.length = 0;
+    if (waiting || state.phase !== 'play') trail.length = 0;
   };
 
   const draw = () => {
@@ -235,7 +267,7 @@ export function mountHeroBreakout(root: HTMLElement) {
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
-    if (state.phase === 'play' || state.phase === 'clear') {
+    if (!waiting && (state.phase === 'play' || state.phase === 'clear')) {
       ctx.fillStyle = palette.ink;
       ctx.beginPath();
       ctx.arc(state.ball.x, state.ball.y, state.ball.r + 1, 0, Math.PI * 2);
@@ -248,6 +280,17 @@ export function mountHeroBreakout(root: HTMLElement) {
     ctx.fillStyle = palette.ink;
     roundRect(ctx, state.paddle.x - pw / 2, state.paddle.y + (state.paddle.height - ph), pw, ph, 6);
     ctx.fill();
+    // ペン先が着いたところから、インクの輪が広がる
+    if (landedAt >= 0 && clock - landedAt < .6) {
+      const k = (clock - landedAt) / .6;
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = palette.blue;
+      ctx.lineWidth = 3 * (1 - k) + .5;
+      ctx.beginPath();
+      ctx.arc(state.paddle.x, state.paddle.y, 10 + easeOut(k) * 64, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
 
     if (clearAt >= 0) {
       const k = clamp((clock - clearAt) / .7, 0, 1);
@@ -291,7 +334,8 @@ export function mountHeroBreakout(root: HTMLElement) {
     wasAlive = state.bricks.map(brick => brick.alive);
     trail.length = 0;
   } else {
-    dropBricks(.7);
+    // ペン先を待つあいだに降らせて、着くころに並び終える
+    dropBricks(waiting ? 1.3 : .7);
   }
   resize();
   wake();
@@ -332,7 +376,7 @@ export function mountHeroBreakout(root: HTMLElement) {
   document.addEventListener('visibilitychange', wake);
   document.fonts?.ready.then(draw);
 
-  return () => {
+  const stop = () => {
     cancelAnimationFrame(frame);
     clearTimeout(release);
     screen.removeEventListener('pointermove', onMove);
@@ -344,4 +388,5 @@ export function mountHeroBreakout(root: HTMLElement) {
     removeEventListener('neulog-game-visibility', onGame);
     document.removeEventListener('visibilitychange', wake);
   };
+  return { stop, launch, landing };
 }

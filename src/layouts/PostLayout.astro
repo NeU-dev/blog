@@ -4,6 +4,7 @@ import { PostHeader } from '../components/PostHeader';
 import { PostFooter } from '../components/PostFooter';
 import { ArticleReactions } from '../components/ArticleReactions';
 import { postTransitionName } from '../lib/view-transition';
+import { hasOwnToc, tocItems } from '../lib/toc';
 
 interface Props {
   title: string;
@@ -15,9 +16,14 @@ interface Props {
   coverImage?: string;
   slug: string;
   reactionSlug?: string;
+  // 目次をつくるための、本文の見出しと元の文章
+  headings?: { depth: number; slug: string; text: string }[];
+  body?: string;
 }
 
-const { title, description, pubDate, updatedDate, category, tags = [], coverImage, slug, reactionSlug = slug } = Astro.props;
+const { title, description, pubDate, updatedDate, category, tags = [], coverImage, slug, reactionSlug = slug, headings = [], body } = Astro.props;
+const toc = tocItems(headings, body);
+const showTocFold = toc.length > 0 && !hasOwnToc(headings);
 
 const site = Astro.site ?? new URL('https://neu-dev.net');
 const canonicalUrl = new URL(`/${category}/${slug}/`, site).href;
@@ -112,19 +118,39 @@ const formattedDate = pubDate.toLocaleDateString('ja-JP', {
       />
     </div>
 
-    <div class="article-shell container">
-      <article class="article-body" data-article-slug={`${category}/${reactionSlug}`}>
-        <slot />
-      </article>
-      <ArticleReactions client:visible slug={`${category}/${reactionSlug}`} />
-      <PostFooter client:load />
+    <div class="article-layout">
+      <div class="article-shell container">
+        {showTocFold && (
+          <details class="toc-fold">
+            <summary>目次</summary>
+            <ol>
+              {toc.map(item => <li><a href={`#${item.slug}`}>{item.text}</a></li>)}
+            </ol>
+          </details>
+        )}
+        <article class="article-body" data-article-slug={`${category}/${reactionSlug}`}>
+          <slot />
+        </article>
+        <ArticleReactions client:visible slug={`${category}/${reactionSlug}`} />
+        <PostFooter client:load />
+      </div>
+      {toc.length > 0 && (
+        <nav class="toc-rail" aria-label="目次">
+          <p class="toc-rail__title">目次</p>
+          <ol>
+            {toc.map(item => <li><a href={`#${item.slug}`}>{item.text}</a></li>)}
+          </ol>
+        </nav>
+      )}
     </div>
   </div>
 
   <script>
     import { initArticlePolls } from '../lib/article-polls';
     import { communityApi } from '../lib/community';
+    import { initToc } from '../lib/toc';
 
+    initToc();
     const article = document.querySelector<HTMLElement>('.article-body[data-article-slug]');
     if (article) {
       initArticlePolls(article);

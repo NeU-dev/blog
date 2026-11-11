@@ -29,6 +29,11 @@
 ::view-transition-group(cursor) { animation: none; }
 @keyframes vt-page-out { to { opacity: 0; translate: 0 -40px; scale: .98; filter: blur(8px); } }
 @keyframes vt-page-in { from { opacity: 0; translate: 0 72px; } }
+/* 戻るときは逆向きにめくる（向きは BaseLayout の head のスクリプトが決める） */
+html:active-view-transition-type(back)::view-transition-old(root) { animation-name: vt-page-out-back; }
+html:active-view-transition-type(back)::view-transition-new(root) { animation-name: vt-page-in-back; }
+@keyframes vt-page-out-back { to { opacity: 0; translate: 0 40px; scale: .98; filter: blur(8px); } }
+@keyframes vt-page-in-back { from { opacity: 0; translate: 0 -72px; } }
 
 /* テーマ切り替え：押したボタンから円が広がって塗り替わる（円は BaseLayout のスクリプトが描く） */
 :root.theme-vt .site-header, :root.theme-vt .cursor { view-transition-name: none; }
@@ -170,6 +175,22 @@ html.motion .skill-list li:not(.is-in) { opacity: 0; translate: 48px 0; }
 /* 「Claudeとつくる」の前書きは、見出しの線が引かれたあとに出る */
 html.motion .claude-work__lead { transition: opacity .7s var(--ease-out) calc(var(--rd, 0ms) + .4s), translate 1s var(--spring) calc(var(--rd, 0ms) + .4s); }
 html.motion .section-head:not(.is-in) + .claude-work__lead { opacity: 0; translate: 0 24px; }
+
+/* ---------- 記事の目次 ---------- */
+/* 右の余白の目次は記事の頭が出そろってから現れ、青い印はいま読んでいる見出しへ滑っていく */
+html.motion .toc-rail { animation: slide-in-right .9s .9s var(--ease-out) both; }
+@keyframes slide-in-right { from { opacity: 0; translate: 24px 0; } }
+.toc-rail ol::before { transition: translate .7s var(--spring), height .7s var(--spring); }
+.toc-rail a { transition: color .3s, translate .7s var(--spring); }
+.toc-rail a[aria-current] { translate: 4px 0; }
+/* 畳んだ目次は、開くと高さが伸びる（高さの補間に対応したブラウザのみ） */
+html.motion .toc-fold { animation: rise-in .9s .7s var(--ease-out) both; }
+.toc-fold summary::after { transition: rotate .6s var(--spring), translate .6s var(--spring); }
+@supports (interpolate-size: allow-keywords) {
+  html.motion .toc-fold { interpolate-size: allow-keywords; }
+  html.motion .toc-fold::details-content { block-size: 0; overflow-y: clip; transition: block-size .6s var(--ease-out), content-visibility .6s allow-discrete; }
+  html.motion .toc-fold[open]::details-content { block-size: auto; }
+}
 
 /* ---------- 記事の本文 ---------- */
 /* 大見出しは、上の罫線ごと左から書かれていく */

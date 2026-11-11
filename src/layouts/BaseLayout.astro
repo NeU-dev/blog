@@ -39,6 +39,10 @@ const isDefaultImage = new URL(imageUrl).pathname === '/images/og/neulog-home.pn
 const structuredDataJson = structuredData
   ? JSON.stringify(structuredData).replace(/</g, '\\u003c')
   : undefined;
+// 先読みは文書を取りに行くだけにする。先に描画まで進めると、読まれていない記事に訪問の記録が付くため。
+const speculationRules = JSON.stringify({
+  prefetch: [{ where: { and: [{ href_matches: '/*' }, { not: { href_matches: '/rss.xml' } }] }, eagerness: 'moderate' }],
+});
 ---
 
 <!DOCTYPE html>
@@ -69,10 +73,23 @@ const structuredDataJson = structuredData
           root.classList.add('motion');
           setTimeout(() => { if (!root.dataset.motionReady) root.classList.remove('motion'); }, 3000);
         }
-        // ページ移動のアニメーションで着いたときは、飛んできた題名と画像を隠さない
-        addEventListener('pagereveal', event => { if (event.viewTransition) root.classList.add('vt-arrived'); });
+        addEventListener('pagereveal', event => {
+          if (!event.viewTransition) return;
+          // ページ移動のアニメーションで着いたときは、飛んできた題名と画像を隠さない
+          root.classList.add('vt-arrived');
+          // 戻るとき（履歴を戻る、浅い階層へ移る）は、ページを逆向きにめくる
+          const activation = window.navigation?.activation;
+          const from = activation?.from;
+          const to = activation?.entry;
+          if (!from?.url || !to?.url) return;
+          const depth = url => new URL(url).pathname.split('/').filter(Boolean).length;
+          const back = activation.navigationType === 'traverse' ? to.index < from.index : depth(to.url) < depth(from.url);
+          if (back) event.viewTransition.types?.add('back');
+        });
       })();
     </script>
+    <!-- リンクに触れたら、移動先のページを先に取りに行く（対応ブラウザのみ） -->
+    <script type="speculationrules" is:inline set:html={speculationRules}></script>
     <meta property="og:locale" content="ja_JP" />
     <meta property="og:site_name" content="NeULOG" />
     <meta property="og:type" content={type} />
